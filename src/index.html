@@ -136,14 +136,6 @@
       <span>Wallpaper animado <small class="muted">(atrás dos ícones)</small></span>
       <button class="switch" id="swWallpaper" role="switch"></button>
     </div>
-    <div class="row toggle-row">
-      <span>Pausar com jogo em tela cheia</span>
-      <button class="switch" id="swPauseFull" role="switch"></button>
-    </div>
-    <div class="row toggle-row">
-      <span>Pausar com janela maximizada</span>
-      <button class="switch" id="swPauseMax" role="switch"></button>
-    </div>
 
     <label class="row-label">Fundo do player</label>
     <div class="seg" id="segBg">
@@ -165,7 +157,7 @@
     <div class="seg" id="segBrowser"></div>
     <p class="hint" id="discordStatus"></p>
 
-    <label class="row-label">Busca abre no</label>
+    <label class="row-label">Tocar e buscar no</label>
     <div class="seg" id="segService"></div>
 
     <div class="row toggle-row">
@@ -192,6 +184,9 @@
   </section>
 
   <div id="toast" role="status"></div>
+
+  <!-- player do YouTube escondido (o áudio do YouTube Music toca por ele) -->
+  <div id="ytWrap" aria-hidden="true"><div id="ytHost"></div></div>
 
   <script type="module" src="app.js"></script>
 </body>

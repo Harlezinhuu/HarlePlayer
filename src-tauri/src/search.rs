@@ -83,6 +83,32 @@ fn http_get(url: &str) -> Result<String, HttpErr> {
     }
 }
 
+/// Limite de tamanho de um áudio baixado (mixes longas de DJ cabem).
+const MAX_AUDIO: usize = 250 * 1024 * 1024;
+
+fn http_bytes(url: &str) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let resp = ureq::get(url)
+        .set("User-Agent", BROWSER_UA)
+        .timeout(Duration::from_secs(180))
+        .call()
+        .map_err(|e| e.to_string())?;
+    let mut buf = Vec::new();
+    resp.into_reader()
+        .take(MAX_AUDIO as u64 + 1)
+        .read_to_end(&mut buf)
+        .map_err(|e| e.to_string())?;
+    if buf.len() > MAX_AUDIO {
+        return Err("Arquivo de áudio grande demais".into());
+    }
+    Ok(buf)
+}
+
+/// Baixa o áudio de uma música do SoundCloud (link da faixa) pra tocar dentro do app.
+pub fn soundcloud_audio(permalink: &str) -> Result<Vec<u8>, String> {
+    soundcloud::audio(permalink)
+}
+
 fn enc(s: &str) -> String {
     let mut out = String::with_capacity(s.len() * 3);
     for b in s.bytes() {
@@ -198,10 +224,127 @@ mod soundcloud {
         })
     }
 
+    /// GET numa URL da api-v2 acrescentando o client_id (renova se expirou).
+    fn api_get(url: &str) -> Result<Value, String> {
+        for attempt in 0..2 {
+            let id = client_id(attempt == 1)?;
+            let sep = if url.contains('?') { '&' } else { '?' };
+            match http_get(&format!("{url}{sep}client_id={id}")) {
+                Ok(t) => return serde_json::from_str(&t).map_err(|e| e.to_string()),
+                Err(HttpErr::Status(401 | 403)) if attempt == 0 => continue,
+                Err(HttpErr::Status(404)) => return Err("Música não encontrada no SoundCloud".into()),
+                Err(e) => return Err(format!("SoundCloud: {}", err_text(e))),
+            }
+        }
+        Err("SoundCloud recusou o pedido".into())
+    }
+
+    /// Melhor formato tocável sem DRM (os "encrypted-hls" ficam de fora).
+    pub(super) fn pick_transcoding(track: &Value) -> Option<&Value> {
+        let list = track["media"]["transcodings"].as_array()?;
+        let score = |t: &Value| -> Option<u8> {
+            let proto = t["format"]["protocol"].as_str()?;
+            let mime = t["format"]["mime_type"].as_str().unwrap_or("");
+            match proto {
+                "progressive" if mime.starts_with("audio/mpeg") => Some(0),
+                "hls" if mime.starts_with("audio/mpeg") => Some(1),
+                "hls" if mime.starts_with("audio/mp4") => Some(2),
+                "hls" if mime.starts_with("audio/ogg") => Some(3),
+                _ => None,
+            }
+        };
+        list.iter()
+            .filter(|t| t["url"].is_string())
+            .filter_map(|t| score(t).map(|s| (s, t)))
+            .min_by_key(|(s, _)| *s)
+            .map(|(_, t)| t)
+    }
+
+    pub fn audio(permalink: &str) -> Result<Vec<u8>, String> {
+        if !permalink.starts_with("https://soundcloud.com/") {
+            return Err("Link do SoundCloud inválido".into());
+        }
+        let track = api_get(&format!("https://api-v2.soundcloud.com/resolve?url={}", enc(permalink)))?;
+        if track["kind"] != "track" {
+            return Err("Esse link não é uma música".into());
+        }
+        if track["policy"] == "BLOCK" {
+            return Err("O SoundCloud bloqueou essa música na sua região".into());
+        }
+        let tc = pick_transcoding(&track).ok_or("Essa música só toca no app oficial do SoundCloud")?;
+        let mut stream_api = tc["url"].as_str().unwrap_or_default().to_string();
+        if let Some(auth) = track["track_authorization"].as_str() {
+            stream_api = format!("{stream_api}?track_authorization={auth}");
+        }
+        let info = api_get(&stream_api)?;
+        let media_url = info["url"].as_str().ok_or("O SoundCloud não mandou o link do áudio")?;
+
+        if tc["format"]["protocol"] == "progressive" {
+            return http_bytes(media_url);
+        }
+        // HLS: baixa a playlist e junta os pedaços num arquivo só
+        let playlist = http_get(media_url).map_err(err_text)?;
+        let mut out = Vec::new();
+        for part in hls_parts(media_url, &playlist) {
+            out.extend(http_bytes(&part)?);
+            if out.len() > MAX_AUDIO {
+                return Err("Música grande demais".into());
+            }
+        }
+        if out.is_empty() {
+            return Err("O SoundCloud mandou uma playlist de áudio vazia".into());
+        }
+        Ok(out)
+    }
+
+    /// Pedaços de uma playlist HLS em ordem (o "init" do EXT-X-MAP vem primeiro).
+    pub(super) fn hls_parts(base: &str, playlist: &str) -> Vec<String> {
+        let mut parts = Vec::new();
+        for line in playlist.lines().map(str::trim) {
+            if let Some(rest) = line.strip_prefix("#EXT-X-MAP:") {
+                if let Some(i) = rest.find("URI=\"") {
+                    let uri = &rest[i + 5..];
+                    if let Some(end) = uri.find('"') {
+                        parts.push(join_url(base, &uri[..end]));
+                    }
+                }
+            } else if !line.is_empty() && !line.starts_with('#') {
+                parts.push(join_url(base, line));
+            }
+        }
+        parts
+    }
+
+    fn join_url(base: &str, rel: &str) -> String {
+        if rel.starts_with("http://") || rel.starts_with("https://") {
+            return rel.to_string();
+        }
+        let base = base.split('?').next().unwrap_or(base);
+        if rel.starts_with('/') {
+            let after = base.find("://").map(|i| i + 3).unwrap_or(0);
+            let host_end = base[after..].find('/').map(|i| after + i).unwrap_or(base.len());
+            return format!("{}{}", &base[..host_end], rel);
+        }
+        match base.rfind('/') {
+            Some(i) => format!("{}/{}", &base[..i], rel),
+            None => rel.to_string(),
+        }
+    }
+
     pub fn search(q: &str) -> Result<SearchResult, String> {
         let tracks_json = api("search/tracks", q, 20)?;
         let users_json = api("search/users", q, 10).unwrap_or(Value::Null);
         Ok(parse(&tracks_json, &users_json))
+    }
+
+    #[cfg(test)]
+    pub(super) fn hls_parts_for_test(base: &str, pl: &str) -> Vec<String> {
+        hls_parts(base, pl)
+    }
+
+    #[cfg(test)]
+    pub(super) fn pick_for_test(t: &Value) -> Option<&str> {
+        pick_transcoding(t).and_then(|x| x["url"].as_str())
     }
 
     #[cfg(test)]
@@ -522,6 +665,51 @@ mod tests {
         urls.sort();
         urls.dedup();
         assert_eq!(urls.len(), r.tracks.len());
+    }
+
+    #[test]
+    fn hls_monta_lista_de_pedacos() {
+        let pl = "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\nseg1.m4s\n#EXTINF:10,\n/abs/seg2.m4s\n#EXTINF:5,\nhttps://cdn.x/seg3.m4s\n#EXT-X-ENDLIST\n";
+        let parts = soundcloud::hls_parts_for_test("https://media.sc/a/b/playlist.m3u8?sig=1", pl);
+        assert_eq!(parts, vec![
+            "https://media.sc/a/b/init.mp4",
+            "https://media.sc/a/b/seg1.m4s",
+            "https://media.sc/abs/seg2.m4s",
+            "https://cdn.x/seg3.m4s",
+        ]);
+    }
+
+    #[test]
+    fn escolhe_formato_sem_drm() {
+        let t: Value = serde_json::json!({ "media": { "transcodings": [
+            { "url": "a", "format": { "protocol": "ctr-encrypted-hls", "mime_type": "audio/mp4" } },
+            { "url": "b", "format": { "protocol": "hls", "mime_type": "audio/mp4; codecs=\"mp4a.40.2\"" } },
+            { "url": "c", "format": { "protocol": "hls", "mime_type": "audio/mpeg" } }
+        ]}});
+        assert_eq!(soundcloud::pick_for_test(&t), Some("c"));
+        let so_drm: Value = serde_json::json!({ "media": { "transcodings": [
+            { "url": "a", "format": { "protocol": "cbc-encrypted-hls", "mime_type": "audio/mp4" } }
+        ]}});
+        assert_eq!(soundcloud::pick_for_test(&so_drm), None);
+    }
+
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_soundcloud_audio() {
+        let r = search("soundcloud", "juice wrld").expect("busca no SoundCloud falhou");
+        let mut tocou = false;
+        for t in r.tracks.iter().take(5) {
+            match soundcloud_audio(&t.url) {
+                Ok(bytes) => {
+                    println!("áudio de '{}': {} KB, começa com {:02X?}", t.title, bytes.len() / 1024, &bytes[..8.min(bytes.len())]);
+                    assert!(bytes.len() > 100 * 1024, "áudio pequeno demais");
+                    tocou = true;
+                    break;
+                }
+                Err(e) => println!("'{}' não tocou: {e}", t.title),
+            }
+        }
+        assert!(tocou, "nenhuma das 5 primeiras músicas pôde ser baixada");
     }
 
     #[test]

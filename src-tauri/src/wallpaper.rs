@@ -1,7 +1,6 @@
 //! Modo wallpaper: abre uma segunda janela e "cola" ela atrás dos ícones
 //! da área de trabalho — o mesmo truque usado pelo Wallpaper Engine e pelo
-//! Lively. Também avisa o front quando um jogo/app está em tela cheia, pra
-//! pausar a animação e não roubar FPS.
+//! Lively.
 
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
@@ -41,25 +40,17 @@ pub fn refresh_wallpaper() {
     imp::refresh_wallpaper();
 }
 
-/// Emite "desktop-state" { fullscreen, maximized } quando o app em foco muda.
-pub fn start_watcher(app: AppHandle) {
-    imp::start_watcher(app);
-}
 
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
     use std::ptr::{null, null_mut};
-    use std::time::Duration;
-    use tauri::{AppHandle, Emitter};
     use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, POINT, RECT};
     use windows_sys::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO,
-        MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
+        GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, FindWindowExW, FindWindowW, GetClassNameW, GetForegroundWindow,
-        GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsZoomed,
+        EnumWindows, FindWindowExW, FindWindowW, GetWindowLongPtrW, GetWindowRect,
         SendMessageTimeoutW, SetParent, SetWindowLongPtrW, SetWindowPos, SystemParametersInfoW,
         GWL_STYLE, SMTO_NORMAL, SPIF_SENDCHANGE, SPI_GETDESKWALLPAPER, SPI_SETDESKWALLPAPER,
         SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, WS_CAPTION, WS_CHILD,
@@ -168,63 +159,14 @@ mod imp {
             }
         }
     }
-
-    /// (tela cheia, maximizada) do app que está em foco.
-    unsafe fn foreground_state(me: u32) -> (bool, bool) {
-        let fg = GetForegroundWindow();
-        if fg.is_null() {
-            return (false, false);
-        }
-        let mut pid = 0u32;
-        GetWindowThreadProcessId(fg, &mut pid);
-        if pid == me {
-            return (false, false);
-        }
-        let mut cls = [0u16; 64];
-        let n = GetClassNameW(fg, cls.as_mut_ptr(), cls.len() as i32).max(0) as usize;
-        let name = String::from_utf16_lossy(&cls[..n]);
-        if matches!(
-            name.as_str(),
-            "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd"
-        ) {
-            return (false, false);
-        }
-        let mut r: RECT = std::mem::zeroed();
-        GetWindowRect(fg, &mut r);
-        let m = monitor_rect(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST));
-        let full = r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom;
-        let maxed = IsZoomed(fg) != 0;
-        (full, full || maxed)
-    }
-
-    pub fn start_watcher(app: AppHandle) {
-        std::thread::spawn(move || {
-            let me = std::process::id();
-            let mut last = (false, false);
-            loop {
-                let st = unsafe { foreground_state(me) };
-                if st != last {
-                    last = st;
-                    let _ = app.emit(
-                        "desktop-state",
-                        serde_json::json!({ "fullscreen": st.0, "maximized": st.1 }),
-                    );
-                }
-                std::thread::sleep(Duration::from_millis(1200));
-            }
-        });
-    }
 }
 
 #[cfg(not(windows))]
 mod imp {
-    use tauri::AppHandle;
-
     pub fn attach(_win: &tauri::WebviewWindow) -> Result<(), String> {
         Err("O modo wallpaper só funciona no Windows por enquanto".into())
     }
 
     pub fn refresh_wallpaper() {}
 
-    pub fn start_watcher(_app: AppHandle) {}
 }

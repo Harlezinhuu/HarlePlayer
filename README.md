@@ -25,12 +25,12 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Letra sincronizada** aparecendo em pedacinhos animados em cima do fundo, via [LRCLIB](https://lrclib.net).
 - **Relógio gigante** em fonte condensada, no estilo de tela de bloqueio.
 - **Fundo dinâmico** feito com a capa da música. A cor de destaque do app também muda conforme a capa.
-- **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…). O clique abre direto na música. Pros outros serviços, ou se a busca do site falhar, os resultados vêm do Deezer.
+- **Toca dentro do próprio app**, sem abrir navegador: SoundCloud (o áudio é baixado e tocado aqui) e YouTube Music / YouTube (pelo player oficial do YouTube, escondido). Fila com próxima/anterior, avança sozinho e funciona com as teclas de mídia.
+- **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…). O clique toca a música na hora. Pros outros serviços, ou se a busca do site falhar, os resultados vêm do Deezer.
 - **Controles**: tocar/pausar, próxima, anterior e barra de progresso clicável.
 - **Wallpaper animado atrás dos ícones**, no estilo Wallpaper Engine. Mostra o relógio, a letra e a música tocando direto na área de trabalho.
 - **Biblioteca de wallpapers**: vídeo (mp4/webm), GIF ou imagem, mais o **Aurora**, um fundo animado embutido que muda de cor conforme a capa.
 - **Discord Rich Presence**: mostra "Ouvindo SoundCloud" (ou YouTube Music, YouTube…) no seu perfil, com capa, artista, barra de tempo e botão "Ouvir no …". Detecta sozinho onde a música está tocando, até no navegador.
-- **Pausa sozinho com jogo em tela cheia**, pra não roubar FPS. Também pode pausar com janela maximizada.
 - Fica na **bandeja do sistema** quando você fecha.
 
 <img src="docs/search.jpg" alt="Busca com resultados e artistas" />
@@ -96,12 +96,12 @@ O GitHub Actions roda tudo a cada push. A busca ao vivo também roda todo dia, p
 │                                          │ IPC  │   e manda play/pause/próxima pro app de música│
 │ duas janelas: player e wallpaper         │      │ net.rs   → LRCLIB (letras) e Deezer (busca)   │
 └──────────────────────────────────────────┘      │ wallpaper.rs → janela atrás dos ícones        │
-                                                  │   (WorkerW) + detecta jogo em tela cheia      │
+                                                  │   (camada WorkerW do Explorer)                │
                                                   │ main.rs  → bandeja e comandos                 │
                                                   └───────────────────────────────────────────────┘
 ```
 
-O modo wallpaper usa o mesmo truque do Wallpaper Engine e do Lively: o Explorer cria uma camada chamada **WorkerW** entre o papel de parede e os ícones, e o app pendura uma segunda janela nela. A cada 1,2 s o Rust confere se o app em foco está em tela cheia, e o wallpaper congela enquanto estiver.
+O modo wallpaper usa o mesmo truque do Wallpaper Engine e do Lively: o Explorer cria uma camada chamada **WorkerW** entre o papel de parede e os ícones, e o app pendura uma segunda janela nela. 
 
 A busca do SoundCloud usa a `api-v2` com o `client_id` público que o próprio site carrega. A do YouTube Music usa a API interna `youtubei/v1/search`, a mesma usada pela [ytmusicapi](https://github.com/sigma67/ytmusicapi). Nenhuma das duas é oficial: se o site mudar, o app mostra um aviso e cai pro Deezer.
 

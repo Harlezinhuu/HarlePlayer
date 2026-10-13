@@ -425,3 +425,6 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
 .res-note { margin: -6px 0 10px; font-size: 11.5px; color: #ffb86b; }
 .res-note:empty { display: none; }
 .artists .res-tile .sk { border-radius: 50%; }
+
+/* player do YouTube escondido */
+#ytWrap { position: fixed; left: -420px; bottom: 0; width: 200px; height: 200px; opacity: 0; pointer-events: none; }

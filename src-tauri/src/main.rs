@@ -64,6 +64,16 @@ async fn search_music(service: String, query: String) -> Result<search::SearchRe
         .map_err(|e| e.to_string())?
 }
 
+/// Baixa o áudio de uma música do SoundCloud pra tocar dentro do app.
+/// Volta os bytes crus (ArrayBuffer no JS), sem passar por base64.
+#[tauri::command]
+async fn soundcloud_audio(url: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = tauri::async_runtime::spawn_blocking(move || search::soundcloud_audio(&url))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Atualiza o "Ouvindo …" no perfil do Discord.
 #[tauri::command]
 fn discord_set(presence: discord::Presence) {
@@ -186,7 +196,6 @@ fn main() {
         .setup(|app| {
             build_tray(app)?;
             media::start_watcher(app.handle().clone());
-            wallpaper::start_watcher(app.handle().clone());
             discord::start();
             Ok(())
         })
@@ -197,6 +206,7 @@ fn main() {
             open_url,
             set_wallpaper_mode,
             search_music,
+            soundcloud_audio,
             discord_set,
             discord_clear,
             discord_status,

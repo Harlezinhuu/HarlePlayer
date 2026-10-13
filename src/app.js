@@ -2,6 +2,7 @@
 // Dentro do app, fala com o Rust via window.__TAURI__.
 // Aberto direto no navegador, roda em "modo demo" com dados de exemplo.
 
+import { createPlayer } from "./player.js";
 import { fmt, esc, rgbToHsl, hslToRgb, slotOf, cleanTitle, cleanArtist, lyricVariants, parseLrc, isPlaceholderTitle } from "./lib.js";
 
 const $ = (s) => document.querySelector(s);
@@ -49,8 +50,6 @@ const DEFAULTS = {
   clock24: true,
   wallpaperMode: false, // wallpaper animado atrás dos ícones
   wallpaperId: "builtin:aurora",
-  pauseFullscreen: true,
-  pauseMaximized: false,
   discord: true, // Rich Presence
   discordSpotify: false, // o Spotify já mostra sozinho no Discord
   browserService: "soundcloud", // quando não dá pra saber qual site do navegador está tocando
@@ -126,7 +125,57 @@ function openInService(query, directLink) {
 }
 
 function control(action, positionMs) {
+  // Música tocando no player interno → controla ele; senão, o app de música do Windows.
+  if (player?.active && local) {
+    if (action === "toggle") return player.toggle();
+    if (action === "next") return player.next();
+    if (action === "prev") return player.prev();
+    if (action === "seek") return player.seek(positionMs);
+  }
   return api.invoke("media_control", { action, positionMs }).catch((e) => toast(String(e)));
+}
+
+// ===================================================================
+// Player interno (toca SoundCloud e YouTube dentro do app)
+// ===================================================================
+const PLAYABLE = { soundcloud: true, ytmusic: true, youtube: true };
+let local = null; // estado do player interno enquanto ele tem música
+const player = IS_WALLPAPER
+  ? null
+  : createPlayer({
+      api,
+      toast,
+      onState: (st) => {
+        local = st.available ? st : null;
+        if (local) onMedia(st, true);
+        else api.invoke("get_media").then((x) => onMedia(x)).catch(() => {});
+      },
+    });
+
+function toTrack(t, service) {
+  const url = service === "youtube" && t.url ? t.url.replace("://music.youtube.com/", "://www.youtube.com/") : t.url;
+  return { title: t.title, artist: t.artist || "", cover: t.cover || null, url, service, durationMs: t.durationMs || 0 };
+}
+
+/** Procura no serviço escolhido e toca o primeiro resultado (sem abrir navegador). */
+async function playQuery(q) {
+  if (!player || !PLAYABLE[settings.service]) return openInService(q);
+  const svc = settings.service;
+  toast(`Procurando no ${SERVICES[svc].name}…`, 2500);
+  try {
+    const res = await api.invoke("search_music", { service: svc === "soundcloud" ? "soundcloud" : "ytmusic", query: q });
+    const tracks = (res?.tracks || []).map((t) => toTrack(t, svc));
+    if (!tracks.length) return toast("Não achei essa música");
+    player.playQueue(tracks, 0);
+  } catch (e) {
+    toast(String(e?.message || e));
+  }
+}
+
+/** Toca um item do histórico/carrossel: direto se já tocou aqui, senão procura. */
+function playItem(item) {
+  if (player && item.play?.url) return player.playQueue([item.play], 0);
+  return playQuery(`${item.title} ${item.artist}`.trim());
 }
 
 function shrinkImage(src, size = 220) {
@@ -419,7 +468,7 @@ async function applyBackground() {
   }
 }
 
-// Pausa tudo (vídeo, aurora, animações) — usado quando um jogo está em tela cheia.
+// Pausa tudo (vídeo, aurora, animações).
 function setPaused(on) {
   if (paused === on) return;
   paused = on;
@@ -442,6 +491,9 @@ function upsertHistory(s) {
   const i = history.findIndex((h) => h.key === key);
   const entry = i >= 0 ? history[i] : { key, title: s.title, artist: s.artist, album: s.album, thumb: null };
   if (i >= 0) history.splice(i, 1);
+  if (s.local && s.link) {
+    entry.play = { title: s.title, artist: s.artist, cover: s.coverUrl, url: s.link, service: s.service, durationMs: s.durationMs };
+  }
   history.unshift(entry);
   history = history.slice(0, 24);
   saveHistory();
@@ -474,13 +526,12 @@ function renderQueue() {
   }
   const list = history.filter((h) => h.key !== curKey).slice(0, 14);
   $("#historyList").innerHTML = list
-    .map((h, i) => `<li data-i="${i}" title="Abrir no ${esc(SERVICES[settings.service].name)}">${queueItemHtml(h, false)}</li>`)
+    .map((h, i) => `<li data-i="${i}" title="Tocar">${queueItemHtml(h, false)}</li>`)
     .join("");
   $("#historyList").onclick = (e) => {
     const li = e.target.closest("li");
     if (!li) return;
-    const h = list[+li.dataset.i];
-    openInService(`${h.title} ${h.artist}`.trim());
+    playItem(list[+li.dataset.i]);
   };
 }
 $("#nowItem").addEventListener("click", () => control("toggle"));
@@ -570,7 +621,7 @@ carousel.addEventListener("click", (e) => {
   } else if (it.current) {
     control("toggle");
   } else {
-    openInService(`${it.title} ${it.artist}`.trim());
+    playItem(it);
   }
 });
 
@@ -597,7 +648,9 @@ function renderMini() {
   const svc = curKey ? playingService() : "";
   const via = svc && svc !== "other" ? serviceName(svc) : "";
   $("#miniArtist").textContent = curKey
-    ? [media.artist || media.album, via].filter(Boolean).join(" · ")
+    ? media.loading
+      ? `Carregando do ${via || "serviço"}…`
+      : [media.artist || media.album, via].filter(Boolean).join(" · ")
     : generic
       ? "O site não informou o nome da música"
       : "Abra o SoundCloud, YouTube Music, Spotify…";
@@ -788,7 +841,7 @@ async function runSearch(q) {
     ? tracks
         .map(
           (t, i) =>
-            `<div class="res-tile" data-t="${i}" title="Abrir no ${svcName}">${t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy" draggable="false">` : `<div class="sk"></div>`}<b>${esc(t.title)}</b><span>${esc(t.artist)}${t.durationMs ? ` · ${fmt(t.durationMs)}` : ""}</span></div>`,
+            `<div class="res-tile" data-t="${i}" title="Tocar">${t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy" draggable="false">` : `<div class="sk"></div>`}<b>${esc(t.title)}</b><span>${esc(t.artist)}${t.durationMs ? ` · ${fmt(t.durationMs)}` : ""}</span></div>`,
         )
         .join("")
     : `<div class="res-empty">Nada encontrado. Enter abre a busca direto no ${svcName}.</div>`;
@@ -796,12 +849,17 @@ async function runSearch(q) {
     ? artists
         .map(
           (a, i) =>
-            `<div class="res-tile" data-a="${i}" title="Abrir no ${svcName}">${a.picture ? `<img src="${esc(a.picture)}" alt="" loading="lazy" draggable="false">` : `<div class="sk"></div>`}<b>${esc(a.name)}</b></div>`,
+            `<div class="res-tile" data-a="${i}" title="Tocar">${a.picture ? `<img src="${esc(a.picture)}" alt="" loading="lazy" draggable="false">` : `<div class="sk"></div>`}<b>${esc(a.name)}</b></div>`,
         )
         .join("")
     : `<div class="res-empty">—</div>`;
 
-  const open = (query, url) => {
+  const open = (query, url, i) => {
+    // SoundCloud / YouTube: toca aqui dentro, com os resultados como fila
+    if (player && PLAYABLE[svc]) {
+      if (res.source !== "deezer" && i !== undefined) return player.playQueue(tracks.map((t) => toTrack(t, svc)), i);
+      return playQuery(query);
+    }
     if (direct && url) {
       api.invoke("open_url", { url: fixUrl(url) }).then(() => toast(`Abrindo no ${SERVICES[svc].name}…`)).catch((e) => toast(String(e)));
     } else {
@@ -812,12 +870,16 @@ async function runSearch(q) {
     const el = e.target.closest("[data-t]");
     if (!el) return;
     const t = tracks[+el.dataset.t];
-    open(`${t.title} ${t.artist}`, t.url);
+    open(`${t.title} ${t.artist}`, t.url, +el.dataset.t);
   };
   $("#resArtists").onclick = (e) => {
     const el = e.target.closest("[data-a]");
     if (!el) return;
     const a = artists[+el.dataset.a];
+    if (player && PLAYABLE[svc]) {
+      input.value = a.name; // busca as músicas do artista
+      return runSearch(a.name);
+    }
     open(a.name, a.url);
   };
 }
@@ -832,7 +894,7 @@ input.addEventListener("keydown", (e) => {
     clearTimeout(searchTimer);
     const q = input.value.trim();
     if (!q) return;
-    if (!$("#results").hidden && $("#resTracks .res-empty")) openInService(q);
+    if (!$("#results").hidden && $("#resTracks .res-empty")) playQuery(q);
     else runSearch(q);
   } else if (e.key === "Escape") {
     input.value = "";
@@ -887,8 +949,6 @@ function renderSettings() {
   $("#swLyrics").classList.toggle("on", settings.lyrics);
   $("#sw24").classList.toggle("on", settings.clock24);
   $("#swWallpaper").classList.toggle("on", settings.wallpaperMode);
-  $("#swPauseFull").classList.toggle("on", settings.pauseFullscreen);
-  $("#swPauseMax").classList.toggle("on", settings.pauseMaximized);
   $("#offVal").textContent = `${settings.lyricsOffset > 0 ? "+" : ""}${settings.lyricsOffset.toFixed(1).replace(".", ",")} s`;
   $("#btnLyrics").classList.toggle("on", settings.lyrics);
   document.body.classList.toggle("no-lyrics", !settings.lyrics);
@@ -1002,38 +1062,6 @@ const stepOffset = (d) => {
 $("#offMinus").addEventListener("click", () => stepOffset(-0.1));
 $("#offPlus").addEventListener("click", () => stepOffset(0.1));
 $("#swWallpaper").addEventListener("click", () => setWallpaperMode(!settings.wallpaperMode));
-$("#swPauseFull").addEventListener("click", () => {
-  settings.pauseFullscreen = !settings.pauseFullscreen;
-  saveSettings();
-  renderSettings();
-});
-$("#swPauseMax").addEventListener("click", () => {
-  settings.pauseMaximized = !settings.pauseMaximized;
-  saveSettings();
-  renderSettings();
-});
-const discordChanged = () => {
-  saveSettings();
-  renderSettings();
-  renderMini();
-  discordSig = "";
-  scheduleDiscord();
-  setTimeout(refreshDiscordStatus, 2500);
-};
-$("#swDiscord").addEventListener("click", () => {
-  settings.discord = !settings.discord;
-  discordChanged();
-});
-$("#swDiscordSpotify").addEventListener("click", () => {
-  settings.discordSpotify = !settings.discordSpotify;
-  discordChanged();
-});
-$("#segBrowser").addEventListener("click", (e) => {
-  const b = e.target.closest("button[data-v]");
-  if (!b) return;
-  settings.browserService = b.dataset.v;
-  discordChanged();
-});
 $("#lnkGithub").addEventListener("click", (e) => {
   e.preventDefault();
   api.invoke("open_url", { url: "https://github.com/Harlezinhuu" }).catch(() => {});
@@ -1148,7 +1176,7 @@ async function updateDiscord() {
 
   const title = cleanTitle(media.title) || media.title;
   const artist = cleanArtist(media.artist || "");
-  const cover = await coverUrlFor(title, artist);
+  const cover = media.coverUrl?.startsWith("https://") ? media.coverUrl : await coverUrlFor(title, artist);
   if (sig !== discordSig) return; // mudou enquanto buscava a capa
 
   api
@@ -1162,7 +1190,7 @@ async function updateDiscord() {
         cover,
         startMs: Math.round(start),
         endMs: media.durationMs > 0 ? Math.round(start + media.durationMs) : null,
-        url: serviceWeb(svc, `${title} ${artist}`.trim()) || null,
+        url: (media.link?.startsWith("https://") && media.link) || serviceWeb(svc, `${title} ${artist}`.trim()) || null,
       },
     })
     .catch(() => {});
@@ -1190,7 +1218,15 @@ function render() {
   renderCarousel();
 }
 
-function onMedia(s) {
+function onMedia(s, fromLocal = false) {
+  if (!s) return;
+  if (!fromLocal && local) {
+    // Enquanto o player interno tem música, ignora o Windows (que também enxerga
+    // o próprio player) — a não ser que outro app comece a tocar outra coisa.
+    const sameTrack = s.title && s.title === local.title;
+    if (!s.playing || sameTrack || local.playing || local.loading) return;
+    local = null;
+  }
   // Site que não informa a música (o navegador manda "Um site está com mídia aberta"):
   // continua dando pra controlar, mas sem nome, letra, histórico ou Discord.
   if (s && isPlaceholderTitle(s.title)) s = { ...s, title: "", artist: "", album: "", generic: true };
@@ -1226,10 +1262,7 @@ render();
 
 api.listen("media-update", onMedia);
 if (IS_WALLPAPER) {
-  // Janela do wallpaper: pausa com jogo em tela cheia e recarrega quando o player muda algo.
-  api.listen("desktop-state", (st) =>
-    setPaused(!!((settings.pauseFullscreen && st.fullscreen) || (settings.pauseMaximized && st.maximized))),
-  );
+  // Janela do wallpaper: recarrega quando o player muda alguma configuração.
   window.addEventListener("storage", (e) => {
     if (e.key === "hp.settings") location.reload();
   });

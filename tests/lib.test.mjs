@@ -79,3 +79,17 @@ test("reconhece o título genérico do navegador", () => {
   assert.ok(!isPlaceholderTitle("Lucid Dreams"));
   assert.ok(!isPlaceholderTitle(""));
 });
+
+import { sniffAudioType, youtubeId } from "../src/player.js";
+test("player reconhece o formato do áudio baixado", () => {
+  assert.equal(sniffAudioType(new Uint8Array([0x49, 0x44, 0x33, 4])), "audio/mpeg"); // ID3
+  assert.equal(sniffAudioType(new Uint8Array([0xff, 0xfb, 0x90, 0])), "audio/mpeg");
+  assert.equal(sniffAudioType(new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69])), "audio/mp4");
+  assert.equal(sniffAudioType(new Uint8Array([0x4f, 0x67, 0x67, 0x53, 0])), "audio/ogg");
+});
+test("player tira o id do vídeo do link do YouTube", () => {
+  assert.equal(youtubeId("https://music.youtube.com/watch?v=mzB1VGEGcSU"), "mzB1VGEGcSU");
+  assert.equal(youtubeId("https://www.youtube.com/watch?v=abc123&t=10"), "abc123");
+  assert.equal(youtubeId("https://youtu.be/xyz"), "xyz");
+  assert.equal(youtubeId("não é link"), null);
+});
