@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Harle Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@200;300;500&family=DM+Serif+Display&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="bg-dynamic">
+  <!-- ===== Fundo ===== -->
+  <div id="bg" aria-hidden="true">
+    <div class="bg-art" id="bgArtA"></div>
+    <div class="bg-art" id="bgArtB"></div>
+    <img id="bgImage" alt="" hidden />
+    <video id="bgVideo" autoplay muted loop playsinline hidden></video>
+    <div class="bg-shade"></div>
+    <div class="bg-grain"></div>
+  </div>
+
+  <!-- ===== Letra (por cima do fundo) ===== -->
+  <div id="lyrics" aria-live="off"><span id="lyricChunk"></span></div>
+
+  <!-- ===== Barra de arrastar + controles da janela ===== -->
+  <header id="titlebar" data-tauri-drag-region>
+    <div class="win-controls">
+      <button class="win-btn" id="btnMin" title="Minimizar" aria-label="Minimizar">
+        <svg viewBox="0 0 12 12"><path d="M2 6h8" /></svg>
+      </button>
+      <button class="win-btn" id="btnClose" title="Fechar (continua na bandeja)" aria-label="Fechar">
+        <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== Relógio ===== -->
+  <section id="clock">
+    <div id="date"></div>
+    <div id="time">0:00</div>
+  </section>
+
+  <!-- ===== Continuar ouvindo ===== -->
+  <aside id="queue" class="glass">
+    <div class="queue-head">
+      <span>Continuar ouvindo</span>
+      <svg viewBox="0 0 24 24" class="chev"><path d="M7 10l5 5 5-5" /></svg>
+    </div>
+    <div id="nowItem" class="now-item"></div>
+    <ul id="historyList"></ul>
+  </aside>
+
+  <!-- ===== Carrossel de capas ===== -->
+  <main id="stage">
+    <div id="carousel"></div>
+    <div id="results" hidden>
+      <h3>Principais resultados</h3>
+      <div id="resTracks" class="res-row"></div>
+      <h3>Artistas</h3>
+      <div id="resArtists" class="res-row artists"></div>
+    </div>
+  </main>
+
+  <!-- ===== Barra inferior: busca + player ===== -->
+  <footer id="dock" class="glass">
+    <div class="search">
+      <button id="btnService" class="service-btn" title="Trocar serviço da busca"></button>
+      <svg viewBox="0 0 24 24" class="search-ico"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4" /></svg>
+      <input id="searchInput" type="text" placeholder="Pesquisar…" autocomplete="off" spellcheck="false" />
+    </div>
+
+    <div class="transport">
+      <button id="btnPrev" class="t-btn" title="Anterior" aria-label="Anterior">
+        <svg viewBox="0 0 24 24"><path d="M6 5v14M19 5L9 12l10 7z" /></svg>
+      </button>
+      <button id="btnPlay" class="t-btn play" title="Tocar/Pausar" aria-label="Tocar ou pausar">
+        <svg viewBox="0 0 24 24" class="ico-play"><path d="M7 4.5v15l13-7.5z" /></svg>
+        <svg viewBox="0 0 24 24" class="ico-pause"><path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z" /></svg>
+      </button>
+      <button id="btnNext" class="t-btn" title="Próxima" aria-label="Próxima">
+        <svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l10 7-10 7z" /></svg>
+      </button>
+    </div>
+
+    <div class="mini">
+      <img id="miniCover" alt="" />
+      <div class="mini-text">
+        <div id="miniTitle">Nada tocando</div>
+        <div id="miniArtist">Abra o Spotify, YouTube Music…</div>
+      </div>
+      <div class="mini-time"><span id="tCur">0:00</span><span id="tDur">0:00</span></div>
+      <div id="progress" class="progress"><div id="progressFill"></div></div>
+    </div>
+
+    <div class="tools">
+      <button id="btnLyrics" class="tool-btn on" title="Letras" aria-label="Letras">
+        <svg viewBox="0 0 24 24"><path d="M5 6h14M5 11h10M5 16h7" /><circle cx="18" cy="17" r="2.2" /><path d="M20.2 17V10" /></svg>
+      </button>
+      <button id="btnSettings" class="tool-btn" title="Configurações" aria-label="Configurações">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" /></svg>
+      </button>
+    </div>
+  </footer>
+
+  <!-- ===== Menu de serviço ===== -->
+  <div id="serviceMenu" class="glass popover" hidden></div>
+
+  <!-- ===== Configurações ===== -->
+  <section id="settings" class="glass panel" hidden>
+    <div class="panel-head">
+      <h2>Configurações</h2>
+      <button id="btnCloseSettings" class="win-btn" aria-label="Fechar"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+    </div>
+
+    <label class="row-label">Fundo</label>
+    <div class="seg" id="segBg">
+      <button data-v="dynamic">Capa da música</button>
+      <button data-v="custom">Imagem / vídeo</button>
+      <button data-v="transparent">Transparente</button>
+    </div>
+    <div class="row" id="rowFile">
+      <button id="btnPickFile" class="btn">Escolher arquivo…</button>
+      <span id="fileName" class="muted">Nenhum arquivo</span>
+      <input id="fileInput" type="file" accept="image/*,video/mp4,video/webm" hidden />
+    </div>
+
+    <label class="row-label">Busca abre no</label>
+    <div class="seg" id="segService"></div>
+
+    <div class="row toggle-row">
+      <span>Letras sincronizadas</span>
+      <button class="switch" id="swLyrics" role="switch"></button>
+    </div>
+    <div class="row toggle-row">
+      <span>Ajuste da letra</span>
+      <div class="stepper">
+        <button id="offMinus">−</button>
+        <span id="offVal">0,0 s</span>
+        <button id="offPlus">+</button>
+      </div>
+    </div>
+    <div class="row toggle-row">
+      <span>Relógio 24 horas</span>
+      <button class="switch" id="sw24" role="switch"></button>
+    </div>
+    <div class="row toggle-row">
+      <span>Modo widget <small class="muted">(fixa na área de trabalho)</small></span>
+      <button class="switch" id="swWidget" role="switch"></button>
+    </div>
+
+    <div class="panel-foot">
+      <span>Criado por <b>Harle</b></span>
+      <a href="#" id="lnkGithub">GitHub</a>
+    </div>
+  </section>
+
+  <div id="toast" role="status"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

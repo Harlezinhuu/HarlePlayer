@@ -1,0 +1,49 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Instalar dependências
+        run: npm install
+
+      # Em push normal só compila; em tag (ex.: v0.1.0) também cria a Release com o instalador.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: "Harle Player ${{ github.ref_name }}"
+          releaseBody: "Baixe o instalador **Harle Player_x64-setup.exe** aqui embaixo em *Assets*."
+          releaseDraft: false
+          prerelease: false
+
+      - name: Guardar o .exe como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: harle-player-windows
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/harle-player.exe
