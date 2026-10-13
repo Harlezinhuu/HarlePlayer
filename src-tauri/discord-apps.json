@@ -1,7 +1,7 @@
 {
   "_como_usar": "Crie um app em https://discord.com/developers/applications e cole o Application ID aqui. O NOME do app é o que aparece no perfil ('Ouvindo SoundCloud'). Serviço sem ID usa o 'default'.",
-  "default": "",
-  "soundcloud": "",
+  "default": "1559613656415739944",
+  "soundcloud": "1559613271928209521",
   "ytmusic": "",
   "youtube": "",
   "spotify": "",
