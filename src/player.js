@@ -38,6 +38,7 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
   let loading = false;
   let seq = 0;
   let objectUrl = null;
+  let volume = 1;
 
   // ---------- estado ----------
   let yt = null;
@@ -112,7 +113,10 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
           height: 200,
           playerVars: { autoplay: 1, controls: 0, playsinline: 1, rel: 0, origin: location.origin },
           events: {
-            onReady: () => resolve(),
+            onReady: () => {
+              yt.setVolume?.(Math.round(volume * 100));
+              resolve();
+            },
             onStateChange: (e) => {
               if (engine !== "yt") return;
               ytPlaying = e.data === 1;
@@ -270,5 +274,12 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
     h("seekto", (d) => seek((d.seekTime || 0) * 1000));
   }
 
-  return { playQueue, toggle, next: () => next(), prev, seek, stop, state, get active() { return !!cur; } };
+  // volume 0–1 (curva ao quadrado: o meio da barra soa como "metade")
+  function setVolume(v) {
+    volume = Math.min(1, Math.max(0, v));
+    audio.volume = volume * volume;
+    try { yt?.setVolume?.(Math.round(volume * volume * 100)); } catch {}
+  }
+
+  return { playQueue, setVolume, toggle, next: () => next(), prev, seek, stop, state, get active() { return !!cur; } };
 }

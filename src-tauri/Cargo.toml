@@ -1,6 +1,6 @@
 [package]
 name = "harle-player"
-version = "0.3.2"
+version = "0.3.3"
 description = "Player de música estético pro desktop — funciona com Spotify, YouTube Music, SoundCloud e Apple Music"
 authors = ["Harle"]
 license = "MIT"
@@ -22,6 +22,13 @@ windows = { version = "0.58", features = [
   "Foundation_Collections",
   "Media_Control",
   "Storage_Streams",
+  "Win32_Foundation",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
+  "Win32_System_Threading",
 ] }
 windows-sys = { version = "0.59", features = [
   "Win32_Foundation",

@@ -48,6 +48,7 @@ const DEFAULTS = {
   lyrics: true,
   lyricsMode: "line", // line = verso inteiro (karaokê) | chunks = pedaços grandes
   lyricsOffset: 0, // segundos (+ adianta a letra)
+  volume: 0.8, // volume do player interno (0–1)
   clock24: true,
   clockStyle: "solid", // solid | thin | outline
   wallpaperMode: false, // wallpaper animado atrás dos ícones
@@ -153,6 +154,8 @@ const player = IS_WALLPAPER
         else api.invoke("get_media").then((x) => onMedia(x)).catch(() => {});
       },
     });
+
+player?.setVolume(settings.volume);
 
 function toTrack(t, service) {
   const url = service === "youtube" && t.url ? t.url.replace("://music.youtube.com/", "://www.youtube.com/") : t.url;
@@ -1126,6 +1129,95 @@ const toggleLyrics = () => {
 };
 $("#swLyrics").addEventListener("click", toggleLyrics);
 $("#btnLyrics").addEventListener("click", toggleLyrics);
+
+// ===================================================================
+// Volume: player interno → volume dele; música de fora (Spotify, navegador…)
+// → só o volume daquele app no mixer do Windows (não mexe no PC inteiro)
+// ===================================================================
+const vol = { level: settings.volume, target: "Harle Player", source: null, sending: false, pending: null };
+const isLocalVol = () => !!(player?.active && local);
+
+function paintVolume() {
+  const pct = Math.round(vol.level * 100);
+  $("#volRange").value = pct;
+  $("#volRange").style.setProperty("--p", `${pct}%`);
+  $("#volVal").textContent = pct;
+  $("#volTarget").textContent = vol.target;
+  const b = $("#btnVolume");
+  b.classList.toggle("muted", pct === 0);
+  b.classList.toggle("low", pct > 0 && pct < 45);
+}
+
+async function loadVolume() {
+  if (isLocalVol()) {
+    Object.assign(vol, { level: settings.volume, target: "Harle Player", source: null });
+    return paintVolume();
+  }
+  const source = media.available ? media.source || "" : "";
+  try {
+    const info = await api.invoke("get_volume", { source });
+    if (!info) throw 0;
+    Object.assign(vol, { level: info.level, target: info.target === "Sistema" ? "Volume do PC" : info.target, source });
+  } catch {
+    Object.assign(vol, { level: settings.volume, target: "Volume", source });
+  }
+  paintVolume();
+}
+
+// manda pro Windows sem enfileirar (só o valor mais recente)
+async function sendVolume(level) {
+  vol.pending = level;
+  if (vol.sending) return;
+  vol.sending = true;
+  while (vol.pending !== null) {
+    const l = vol.pending;
+    vol.pending = null;
+    try { await api.invoke("set_volume", { source: vol.source || "", level: l }); } catch {}
+  }
+  vol.sending = false;
+}
+
+function setVolumeLevel(level) {
+  vol.level = Math.min(1, Math.max(0, level));
+  paintVolume();
+  if (isLocalVol() || vol.source === null) {
+    settings.volume = vol.level;
+    player?.setVolume(vol.level);
+    clearTimeout(setVolumeLevel.t);
+    setVolumeLevel.t = setTimeout(saveSettings, 400);
+  } else {
+    sendVolume(vol.level);
+  }
+}
+
+function openVolume() {
+  const pop = $("#volumePop");
+  if (!pop.hidden) return;
+  pop.hidden = false;
+  const r = $("#btnVolume").getBoundingClientRect();
+  const w = pop.offsetWidth;
+  pop.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+  pop.style.top = `${r.top - pop.offsetHeight - 12}px`;
+  loadVolume();
+}
+const closeVolume = () => ($("#volumePop").hidden = true);
+
+$("#btnVolume").addEventListener("click", (e) => {
+  e.stopPropagation();
+  $("#volumePop").hidden ? openVolume() : closeVolume();
+});
+$("#volRange").addEventListener("input", (e) => setVolumeLevel(e.target.value / 100));
+for (const el of [$("#btnVolume"), $("#volumePop")]) {
+  el.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    openVolume();
+    setVolumeLevel(vol.level + (e.deltaY < 0 ? 0.05 : -0.05));
+  }, { passive: false });
+}
+document.addEventListener("pointerdown", (e) => {
+  if (!e.target.closest("#volumePop, #btnVolume")) closeVolume();
+});
+paintVolume();
 $("#sw24").addEventListener("click", () => {
   settings.clock24 = !settings.clock24;
   saveSettings();

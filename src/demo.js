@@ -82,6 +82,7 @@ export function createDemoApi() {
     }
   } catch {}
 
+  let demoVol = 0.6;
   return {
     demo: true,
     listen(ev, cb) {
@@ -119,6 +120,11 @@ export function createDemoApi() {
             artists: TRACKS.map((t) => ({ name: t.artist, picture: t.thumb, url: "https://soundcloud.com/" })),
           };
         }
+        case "get_volume":
+          return { level: demoVol, target: "Spotify" };
+        case "set_volume":
+          demoVol = args.level;
+          return { level: demoVol, target: "Spotify" };
         case "check_update":
           return { available: location.search.includes("update"), current: "0.3.0", latest: "0.4.0", url: "https://github.com/Harlezinhuu/HarlePlayer/releases/download/0.4.0/x_x64-setup.exe" };
         case "install_update":

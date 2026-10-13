@@ -107,6 +107,9 @@
     </div>
 
     <div class="tools">
+      <button id="btnVolume" class="tool-btn" title="Volume (roda do mouse ajusta)" aria-label="Volume">
+        <svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" class="vol-body" /><path class="vol-w1" d="M15.5 9.2a4 4 0 0 1 0 5.6" /><path class="vol-w2" d="M18 6.8a7.5 7.5 0 0 1 0 10.4" /><path class="vol-x" d="M16 9.5l5 5M21 9.5l-5 5" /></svg>
+      </button>
       <button id="btnLyrics" class="tool-btn on" title="Letras" aria-label="Letras">
         <svg viewBox="0 0 24 24"><path d="M5 6h14M5 11h10M5 16h7" /><circle cx="18" cy="17" r="2.2" /><path d="M20.2 17V10" /></svg>
       </button>
@@ -115,6 +118,13 @@
       </button>
     </div>
   </footer>
+
+  <!-- ===== Volume ===== -->
+  <div id="volumePop" class="glass" hidden>
+    <span id="volTarget">Volume</span>
+    <input id="volRange" type="range" min="0" max="100" step="1" value="100" aria-label="Volume" />
+    <span id="volVal">100</span>
+  </div>
 
   <!-- ===== Menu de serviço ===== -->
   <div id="serviceMenu" class="glass popover" hidden></div>

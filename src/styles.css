@@ -306,6 +306,31 @@ body.playing .ico-play { display: none !important; }
 .tool-btn.on { opacity: 1; color: rgb(var(--accent)); }
 .tool-btn svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; }
 
+/* ---------- volume ---------- */
+#btnVolume .vol-x { display: none; }
+#btnVolume.muted .vol-x { display: block; }
+#btnVolume.muted .vol-w1, #btnVolume.muted .vol-w2, #btnVolume.low .vol-w2 { display: none; }
+#volumePop {
+  position: fixed; z-index: 21; display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 14px; background: var(--glass-strong);
+  font-size: 11.5px; animation: rise .25s var(--ease);
+}
+#volTarget { color: var(--muted); font-weight: 600; white-space: nowrap; }
+#volVal { width: 26px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+#volRange {
+  -webkit-appearance: none; appearance: none; width: 170px; height: 18px; background: transparent; cursor: pointer;
+  --p: 100%;
+}
+#volRange::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 4px;
+  background: linear-gradient(90deg, rgb(var(--accent)) var(--p), rgba(255, 255, 255, 0.16) var(--p));
+}
+#volRange::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 10px rgba(var(--accent), .8);
+}
+body.mode-wallpaper #volumePop { display: none !important; }
+
 /* ---------- popover de serviço ---------- */
 .popover { position: fixed; z-index: 20; padding: 6px; min-width: 190px; background: var(--glass-strong); animation: rise .25s var(--ease); }
 .popover button {

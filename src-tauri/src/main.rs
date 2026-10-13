@@ -7,6 +7,7 @@ mod media;
 mod net;
 mod search;
 mod updater;
+mod volume;
 mod wallpaper;
 mod ytdlp;
 
@@ -101,6 +102,21 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         .map_err(|e| e.to_string())??;
     app.exit(0);
     Ok(())
+}
+
+/// Volume do app que está tocando (Spotify, navegador…) pelo mixer do Windows.
+#[tauri::command]
+async fn get_volume(source: String) -> Result<volume::VolumeInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || volume::get(&source))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn set_volume(source: String, level: f32) -> Result<volume::VolumeInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || volume::set(&source, level))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Atualiza o "Ouvindo …" no perfil do Discord.
@@ -240,6 +256,8 @@ fn main() {
             youtube_audio,
             check_update,
             install_update,
+            get_volume,
+            set_volume,
             discord_set,
             discord_clear,
             discord_status,
