@@ -69,11 +69,23 @@
   <main id="stage">
     <div id="carousel"></div>
     <div id="results" hidden>
-      <h3 id="resTitle">Principais resultados</h3>
-      <p id="resNote" class="res-note"></p>
-      <div id="resTracks" class="res-row"></div>
-      <h3>Artistas</h3>
-      <div id="resArtists" class="res-row artists"></div>
+      <div class="res-tabs" id="resTabs">
+        <button data-rt="all" class="sel">Tudo</button>
+        <button data-rt="tracks">Músicas</button>
+        <button data-rt="artists">Artistas</button>
+      </div>
+      <div id="resAll">
+        <div class="res-head"><h3 id="resTitle">Principais resultados</h3><button class="res-seeall" data-rt="tracks">Ver tudo</button></div>
+        <p id="resNote" class="res-note"></p>
+        <div id="resTracks" class="res-row"></div>
+        <div class="res-head"><h3>Artistas</h3><button class="res-seeall" data-rt="artists">Ver tudo</button></div>
+        <div id="resArtists" class="res-row artists"></div>
+      </div>
+      <div id="resFull" hidden>
+        <p id="fullNote" class="res-note"></p>
+        <div id="fullList"></div>
+        <div id="fullMore" class="res-more"></div>
+      </div>
     </div>
   </main>
 

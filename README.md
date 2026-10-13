@@ -121,4 +121,6 @@ A posição da música é medida pelo app de origem e interpolada no front a cad
 
 ## 📄 Licença
 
-MIT. Criado por **Harle**.
+**Todos os direitos reservados.** O código está aberto só para visualização e estudo: não é permitido copiar, modificar ou reutilizar sem autorização. Usar o app pelas [Releases](../../releases) é livre. Detalhes em [LICENSE](LICENSE).
+
+Criado por **Harle**.

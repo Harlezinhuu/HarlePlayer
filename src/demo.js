@@ -120,6 +120,17 @@ export function createDemoApi() {
             artists: TRACKS.map((t) => ({ name: t.artist, picture: t.thumb, url: "https://soundcloud.com/" })),
           };
         }
+        case "search_page": {
+          await new Promise((r) => setTimeout(r, 500));
+          const page = +(args.cursor || 0);
+          const mk = (k) => TRACKS.map((t, i) => ({ title: `${t.title} ${page * TRACKS.length + i + 1}`, artist: t.artist, cover: t.thumb, url: `https://soundcloud.com/demo/${k}-${page}-${i}`, durationMs: t.durationMs }));
+          return {
+            source: args.service,
+            tracks: args.kind === "artists" ? [] : [...mk("a"), ...mk("b"), ...mk("c")],
+            artists: args.kind === "artists" ? TRACKS.map((t, i) => ({ name: `${t.artist} ${page}-${i}`, picture: t.thumb, url: "https://soundcloud.com/" })) : [],
+            next: page < 3 ? String(page + 1) : null,
+          };
+        }
         case "get_volume":
           return { level: demoVol, target: "Spotify" };
         case "set_volume":

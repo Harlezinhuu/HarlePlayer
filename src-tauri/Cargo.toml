@@ -3,7 +3,8 @@ name = "harle-player"
 version = "0.3.4"
 description = "Player de música estético pro desktop — funciona com Spotify, YouTube Music, SoundCloud e Apple Music"
 authors = ["Harle"]
-license = "MIT"
+license-file = "../LICENSE"
+publish = false
 edition = "2021"
 
 [build-dependencies]
