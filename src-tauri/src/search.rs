@@ -242,7 +242,30 @@ mod soundcloud {
         Err("SoundCloud recusou o pedido".into())
     }
 
-    /// Melhor formato tocável sem DRM (os "encrypted-hls" ficam de fora).
+    /// Formatos tocáveis sem DRM, do melhor pro pior (os "encrypted-hls" ficam de fora).
+    pub(super) fn playable_transcodings(track: &Value) -> Vec<&Value> {
+        let Some(list) = track["media"]["transcodings"].as_array() else { return Vec::new() };
+        let score = |t: &Value| -> Option<u8> {
+            let proto = t["format"]["protocol"].as_str()?;
+            let mime = t["format"]["mime_type"].as_str().unwrap_or("");
+            match proto {
+                "progressive" if mime.starts_with("audio/mpeg") => Some(0),
+                "hls" if mime.starts_with("audio/mpeg") => Some(1),
+                "hls" if mime.starts_with("audio/mp4") => Some(2),
+                "hls" if mime.starts_with("audio/ogg") => Some(3),
+                _ => None,
+            }
+        };
+        let mut v: Vec<(u8, &Value)> = list
+            .iter()
+            .filter(|t| t["url"].is_string())
+            .filter_map(|t| score(t).map(|s| (s, t)))
+            .collect();
+        v.sort_by_key(|(s, _)| *s);
+        v.into_iter().map(|(_, t)| t).collect()
+    }
+
+    #[allow(dead_code)]
     pub(super) fn pick_transcoding(track: &Value) -> Option<&Value> {
         let list = track["media"]["transcodings"].as_array()?;
         let score = |t: &Value| -> Option<u8> {
@@ -274,7 +297,23 @@ mod soundcloud {
         if track["policy"] == "BLOCK" {
             return Err("O SoundCloud bloqueou essa música na sua região".into());
         }
-        let tc = pick_transcoding(&track).ok_or("Essa música só toca no app oficial do SoundCloud")?;
+        let options = playable_transcodings(&track);
+        if options.is_empty() {
+            return Err("Essa música é protegida e só toca no app oficial do SoundCloud".into());
+        }
+        // tenta cada formato até um funcionar (música de gravadora às vezes
+        // lista formatos que respondem 404)
+        let mut last_err = String::new();
+        for tc in options {
+            match download_transcoding(&track, tc) {
+                Ok(bytes) => return Ok(bytes),
+                Err(e) => last_err = e,
+            }
+        }
+        Err(format!("Essa música não liberou o áudio fora do app oficial do SoundCloud ({last_err})"))
+    }
+
+    fn download_transcoding(track: &Value, tc: &Value) -> Result<Vec<u8>, String> {
         let mut stream_api = tc["url"].as_str().unwrap_or_default().to_string();
         if let Some(auth) = track["track_authorization"].as_str() {
             stream_api = format!("{stream_api}?track_authorization={auth}");
@@ -343,6 +382,11 @@ mod soundcloud {
     #[cfg(test)]
     pub(super) fn hls_parts_for_test(base: &str, pl: &str) -> Vec<String> {
         hls_parts(base, pl)
+    }
+
+    #[cfg(test)]
+    pub(super) fn playable_for_test(t: &Value) -> Vec<&str> {
+        playable_transcodings(t).into_iter().filter_map(|x| x["url"].as_str()).collect()
     }
 
     #[cfg(test)]
@@ -690,6 +734,7 @@ mod tests {
             { "url": "c", "format": { "protocol": "hls", "mime_type": "audio/mpeg" } }
         ]}});
         assert_eq!(soundcloud::pick_for_test(&t), Some("c"));
+        assert_eq!(soundcloud::playable_for_test(&t), vec!["c", "b"]);
         let so_drm: Value = serde_json::json!({ "media": { "transcodings": [
             { "url": "a", "format": { "protocol": "cbc-encrypted-hls", "mime_type": "audio/mp4" } }
         ]}});
@@ -700,7 +745,7 @@ mod tests {
     #[ignore = "usa a internet"]
     fn ao_vivo_soundcloud_audio() {
         let mut tracks = search("soundcloud", "juice wrld").expect("busca no SoundCloud falhou").tracks;
-        tracks.truncate(3);
+        tracks.truncate(4);
         tracks.extend(search("soundcloud", "lofi beat").expect("busca no SoundCloud falhou").tracks.into_iter().take(3));
         let mut tocou = false;
         for t in tracks.iter() {
