@@ -1,0 +1,24 @@
+name: Busca ao vivo
+
+# Faz uma busca de verdade no SoundCloud e no YouTube Music.
+# Como as APIs não são oficiais, roda todo dia: se um dos sites mudar,
+# o selo fica vermelho antes de alguém reclamar.
+on:
+  schedule:
+    - cron: "17 11 * * *" # todo dia, 08:17 em Brasília
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["src-tauri/src/search.rs"]
+
+jobs:
+  live-search:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+      - name: Buscar no SoundCloud e no YouTube Music
+        run: cargo test --manifest-path src-tauri/Cargo.toml ao_vivo -- --ignored --nocapture --test-threads=1

@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "demo": "npx --yes http-server src -p 5173 -c-1 -o"
+    "demo": "npx --yes http-server src -p 5173 -c-1 -o",
+    "test": "node --test tests/lib.test.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
-  }
+  },
+  "type": "module"
 }

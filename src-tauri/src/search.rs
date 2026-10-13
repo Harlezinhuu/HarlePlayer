@@ -31,6 +31,9 @@ pub struct Track {
     /// link direto pra faixa
     pub url: String,
     pub duration_ms: Option<i64>,
+    /// ordem: 0 = melhor resultado, 1 = música, 2 = vídeo
+    #[serde(skip)]
+    rank: u8,
 }
 
 #[derive(Serialize)]
@@ -183,6 +186,7 @@ mod soundcloud {
             cover: big(v["artwork_url"].as_str()).or_else(|| big(v["user"]["avatar_url"].as_str())),
             url: v["permalink_url"].as_str()?.to_string(),
             duration_ms: v["duration"].as_i64(),
+            rank: 1,
         })
     }
 
@@ -197,6 +201,20 @@ mod soundcloud {
     pub fn search(q: &str) -> Result<SearchResult, String> {
         let tracks_json = api("search/tracks", q, 20)?;
         let users_json = api("search/users", q, 10).unwrap_or(Value::Null);
+        Ok(parse(&tracks_json, &users_json))
+    }
+
+    #[cfg(test)]
+    pub(super) fn find_client_id_for_test(t: &str) -> Option<String> {
+        find_client_id(t)
+    }
+
+    #[cfg(test)]
+    pub(super) fn parse_for_test(tracks_json: &Value, users_json: &Value) -> SearchResult {
+        parse(tracks_json, users_json)
+    }
+
+    fn parse(tracks_json: &Value, users_json: &Value) -> SearchResult {
         let tracks = tracks_json["collection"]
             .as_array()
             .map(|a| a.iter().filter_map(track).collect())
@@ -205,11 +223,11 @@ mod soundcloud {
             .as_array()
             .map(|a| a.iter().filter_map(user).collect())
             .unwrap_or_default();
-        Ok(SearchResult {
+        SearchResult {
             source: "soundcloud".into(),
             tracks,
             artists,
-        })
+        }
     }
 }
 
@@ -244,16 +262,22 @@ mod ytmusic {
             Err(e) => return Err(e.to_string()),
         };
         let v: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        Ok(parse(&v))
+    }
 
+    /// Transforma a resposta do YouTube Music em músicas + artistas.
+    pub(super) fn parse(v: &Value) -> SearchResult {
         let mut out = SearchResult {
             source: "ytmusic".into(),
             ..Default::default()
         };
         let mut seen = HashSet::new();
-        walk(&v, &mut out, &mut seen);
+        walk(v, &mut out, &mut seen);
+        // melhor resultado → músicas → vídeos (sort estável mantém a ordem do site)
+        out.tracks.sort_by_key(|t| t.rank);
         out.tracks.truncate(20);
         out.artists.truncate(10);
-        Ok(out)
+        out
     }
 
     /// Percorre o JSON inteiro atrás dos "cards" de resultado. É mais
@@ -400,6 +424,11 @@ mod ytmusic {
             return;
         }
         let sub = runs(col(1));
+        let kind = sub.first().and_then(|r| r["text"].as_str()).unwrap_or("").trim();
+        if matches!(kind, "Episódio" | "Episode") {
+            return; // podcast
+        }
+        let rank = if matches!(kind, "Vídeo" | "Video") { 2 } else { 1 };
         let duration_ms = sub.iter().rev().filter_map(|r| r["text"].as_str()).find_map(parse_duration);
         out.tracks.push(Track {
             title,
@@ -407,6 +436,7 @@ mod ytmusic {
             cover: thumb(item),
             url: format!("https://music.youtube.com/watch?v={vid}"),
             duration_ms,
+            rank,
         });
     }
 
@@ -426,8 +456,97 @@ mod ytmusic {
                     cover: thumb(card),
                     url: format!("https://music.youtube.com/watch?v={vid}"),
                     duration_ms: sub.iter().rev().filter_map(|r| r["text"].as_str()).find_map(parse_duration),
+                    rank: 0,
                 });
             }
         }
+    }
+}
+
+// =====================================================================
+// Testes:  cargo test            (rápidos, sem internet)
+//          cargo test -- --ignored   (busca de verdade nos sites)
+// =====================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enc_codifica_url() {
+        assert_eq!(enc("juice wrld"), "juice%20wrld");
+        assert_eq!(enc("ação & co"), "a%C3%A7%C3%A3o%20%26%20co");
+        assert_eq!(enc("a-b_c.d~e"), "a-b_c.d~e");
+    }
+
+    #[test]
+    fn soundcloud_acha_client_id() {
+        let js = r#"x={client_id:"AbCdEfGhIjKlMnOpQrStUvWxYz012345",env:"prod"}"#;
+        assert_eq!(soundcloud_find(js).as_deref(), Some("AbCdEfGhIjKlMnOpQrStUvWxYz012345"));
+        let url = "https://api-v2.soundcloud.com/x?client_id=ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ&y=1";
+        assert_eq!(soundcloud_find(url).as_deref(), Some("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"));
+        assert_eq!(soundcloud_find("client_id:\"curto\""), None);
+    }
+
+    fn soundcloud_find(t: &str) -> Option<String> {
+        soundcloud::find_client_id_for_test(t)
+    }
+
+    #[test]
+    fn soundcloud_le_resposta() {
+        let v: Value = serde_json::from_str(include_str!("../tests/fixtures/soundcloud_tracks.json")).unwrap();
+        let r = soundcloud::parse_for_test(&v, &Value::Null);
+        assert!(!r.tracks.is_empty(), "nenhuma faixa lida");
+        for t in &r.tracks {
+            assert!(!t.title.is_empty());
+            assert!(t.url.starts_with("https://soundcloud.com/"), "url estranha: {}", t.url);
+        }
+        // capa grande em vez da miniatura
+        assert!(r.tracks.iter().filter_map(|t| t.cover.as_deref()).all(|c| !c.contains("-large.")));
+    }
+
+    #[test]
+    fn ytmusic_le_resposta() {
+        let v: Value = serde_json::from_str(include_str!("../tests/fixtures/ytmusic_search.json")).unwrap();
+        let r = ytmusic::parse(&v);
+        assert!(r.tracks.len() >= 3, "poucas músicas: {}", r.tracks.len());
+        let first = &r.tracks[0];
+        assert!(first.url.starts_with("https://music.youtube.com/watch?v="));
+        assert!(!first.artist.is_empty(), "primeira música sem artista");
+        assert!(r.tracks.iter().all(|t| !t.title.is_empty()));
+        // sem podcast e com músicas antes dos vídeos
+        assert!(r.tracks.iter().all(|t| t.rank <= 2));
+        assert!(r.tracks.windows(2).all(|w| w[0].rank <= w[1].rank));
+        assert!(r.tracks.iter().filter(|t| t.cover.is_some()).count() >= r.tracks.len() / 2);
+        // sem repetidas
+        let mut urls: Vec<_> = r.tracks.iter().map(|t| &t.url).collect();
+        urls.sort();
+        urls.dedup();
+        assert_eq!(urls.len(), r.tracks.len());
+    }
+
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_soundcloud() {
+        let r = search("soundcloud", "juice wrld").expect("busca no SoundCloud falhou");
+        println!("SoundCloud: {} faixas, {} artistas", r.tracks.len(), r.artists.len());
+        for t in r.tracks.iter().take(3) {
+            println!("  {} — {} ({})", t.title, t.artist, t.url);
+        }
+        assert!(!r.tracks.is_empty());
+        assert!(r.tracks[0].url.starts_with("https://soundcloud.com/"));
+        assert!(!r.artists.is_empty());
+    }
+
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_ytmusic() {
+        let r = search("ytmusic", "juice wrld lucid dreams").expect("busca no YouTube Music falhou");
+        println!("YouTube Music: {} faixas, {} artistas", r.tracks.len(), r.artists.len());
+        for t in r.tracks.iter().take(3) {
+            println!("  {} — {} ({})", t.title, t.artist, t.url);
+        }
+        assert!(r.tracks.len() >= 3);
+        assert!(r.tracks.iter().any(|t| t.artist.to_lowercase().contains("juice")));
+        assert!(r.tracks.iter().any(|t| t.cover.is_some()));
     }
 }

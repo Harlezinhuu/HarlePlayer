@@ -356,3 +356,65 @@ fn open_pipe() -> Option<Box<dyn Pipe>> {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn exemplo() -> Presence {
+        Presence {
+            service: "soundcloud".into(),
+            service_name: "SoundCloud".into(),
+            title: "Lucid Dreams".into(),
+            artist: "Juice WRLD".into(),
+            album: "".into(),
+            cover: Some("https://cdn-images.dzcdn.net/capa.jpg".into()),
+            start_ms: 1_700_000_000_000,
+            end_ms: Some(1_700_000_239_000),
+            url: Some("https://soundcloud.com/search?q=lucid".into()),
+        }
+    }
+
+    #[test]
+    fn fit_respeita_limites_do_discord() {
+        assert_eq!(fit("  oi  ", 128).chars().count(), 2);
+        assert_eq!(fit("a", 128).chars().count(), 2); // mínimo 2
+        assert_eq!(fit(&"x".repeat(300), 128).chars().count(), 128);
+    }
+
+    #[test]
+    fn atividade_de_ouvindo() {
+        let a = build_activity(&exemplo());
+        assert_eq!(a["type"], 2);
+        assert_eq!(a["details"], "Lucid Dreams");
+        assert_eq!(a["state"], "Juice WRLD");
+        // timestamps em segundos
+        assert_eq!(a["timestamps"]["start"], 1_700_000_000);
+        assert_eq!(a["timestamps"]["end"], 1_700_000_239);
+        assert_eq!(a["assets"]["large_image"], "https://cdn-images.dzcdn.net/capa.jpg");
+        assert_eq!(a["assets"]["large_text"], "Lucid Dreams"); // sem álbum usa o título
+        assert_eq!(a["assets"]["small_text"], "SoundCloud");
+        assert_eq!(a["buttons"][0]["label"], "Ouvir no SoundCloud");
+    }
+
+    #[test]
+    fn sem_capa_https_usa_logo_e_sem_link_sem_botao() {
+        let mut p = exemplo();
+        p.cover = Some("data:image/png;base64,AAAA".into());
+        p.url = Some("spotify:search:x".into());
+        p.end_ms = None;
+        let a = build_activity(&p);
+        assert_eq!(a["assets"]["large_image"], "logo");
+        assert!(a.get("buttons").is_none());
+        assert!(a["timestamps"].get("end").is_none());
+    }
+
+    #[test]
+    fn ids_do_json_sao_lidos_sem_erro() {
+        // só garante que o discord-apps.json é JSON válido e que IDs inválidos são ignorados
+        for (k, v) in app_ids() {
+            assert!(!k.starts_with('_'));
+            assert!(v.chars().all(|c| c.is_ascii_digit()));
+        }
+    }
+}

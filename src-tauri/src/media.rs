@@ -293,3 +293,16 @@ mod imp {
         Err("Controle de mídia disponível só no Windows por enquanto".into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::sniff_mime;
+
+    #[test]
+    fn reconhece_formato_da_capa() {
+        assert_eq!(sniff_mime(&[0xFF, 0xD8, 0xFF, 0xE0]), "image/jpeg");
+        assert_eq!(sniff_mime(b"\x89PNG\r\n"), "image/png");
+        assert_eq!(sniff_mime(b"RIFF\0\0\0\0WEBPVP8"), "image/webp");
+        assert_eq!(sniff_mime(b""), "image/png");
+    }
+}

@@ -11,7 +11,8 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 ![Rust](https://img.shields.io/badge/Rust-backend-000000?logo=rust)
 ![JavaScript](https://img.shields.io/badge/JS-sem%20framework-F7DF1E?logo=javascript&logoColor=black)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows)
-[![Build](https://github.com/Harlezinhuu/HarlePlayer/actions/workflows/build.yml/badge.svg)](https://github.com/Harlezinhuu/HarlePlayer/actions)
+[![Build](https://github.com/Harlezinhuu/HarlePlayer/actions/workflows/build.yml/badge.svg)](https://github.com/Harlezinhuu/HarlePlayer/actions/workflows/build.yml)
+[![Busca ao vivo](https://github.com/Harlezinhuu/HarlePlayer/actions/workflows/search-check.yml/badge.svg)](https://github.com/Harlezinhuu/HarlePlayer/actions/workflows/search-check.yml)
 
 <img src="docs/screenshot.jpg" alt="Harle Player tocando, com relógio, carrossel de capas e letra sincronizada" />
 
@@ -74,7 +75,17 @@ npm run dev      # abre o app em modo desenvolvimento
 npm run build    # gera o instalador em src-tauri/target/release/bundle/nsis
 ```
 
-Pra mexer só no visual, sem compilar nada, use `npm run demo`. Ele abre o front no navegador com músicas e letra de exemplo.
+Pra mexer só no visual, sem compilar nada, use `npm run demo`.
+
+### Testes
+
+```bash
+npm test                                              # front: letra, títulos, cores…
+cargo test --manifest-path src-tauri/Cargo.toml       # Rust: Discord, detecção, leitura das buscas
+cargo test --manifest-path src-tauri/Cargo.toml ao_vivo -- --ignored --nocapture   # busca de verdade
+```
+
+O GitHub Actions roda tudo a cada push. A busca ao vivo também roda todo dia, pra avisar se o SoundCloud ou o YouTube Music mudarem alguma coisa. Ele abre o front no navegador com músicas e letra de exemplo.
 
 ## 🧩 Como funciona
 

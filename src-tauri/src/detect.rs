@@ -93,3 +93,27 @@ fn window_titles() -> Vec<String> {
 fn window_titles() -> Vec<String> {
     Vec::new()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::service_for;
+
+    #[test]
+    fn reconhece_apps_de_desktop() {
+        assert_eq!(service_for("Spotify.exe", "x"), "spotify");
+        assert_eq!(service_for("AppleInc.AppleMusicWin_nzyj5cx40ttqa!App", "x"), "apple");
+        assert_eq!(service_for("com.github.th-ch.youtube-music", "x"), "ytmusic");
+        assert_eq!(service_for("Deezer.exe", "x"), "deezer");
+    }
+
+    #[test]
+    fn app_desconhecido_vira_other() {
+        assert_eq!(service_for("vlc.exe", "musica-que-nao-existe-em-janela-nenhuma"), "other");
+    }
+
+    #[test]
+    fn navegador_sem_pista_vira_browser() {
+        let s = service_for("Chrome", "musica-que-nao-existe-em-janela-nenhuma");
+        assert!(["browser", "soundcloud", "ytmusic", "youtube", "deezer", "apple", "spotify"].contains(&s.as_str()));
+    }
+}
