@@ -93,6 +93,14 @@ export function createDemoApi() {
           }
           return "null";
         }
+        case "search_music": {
+          await new Promise((r) => setTimeout(r, 600));
+          return {
+            source: args.service,
+            tracks: [...TRACKS, ...TRACKS].map((t) => ({ title: `${t.title} (remix)`, artist: t.artist, cover: t.thumb, url: args.service === "ytmusic" ? "https://music.youtube.com/" : "https://soundcloud.com/", durationMs: t.durationMs })),
+            artists: TRACKS.map((t) => ({ name: t.artist, picture: t.thumb, url: "https://soundcloud.com/" })),
+          };
+        }
         case "discord_set":
           console.log("[demo] discord", JSON.stringify(args.presence));
           return;

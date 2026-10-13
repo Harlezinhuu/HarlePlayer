@@ -41,7 +41,7 @@ const store = {
 
 const DEFAULTS = {
   bg: "dynamic", // dynamic | custom | transparent
-  service: "spotify",
+  service: "soundcloud",
   lyrics: true,
   lyricsOffset: 0, // segundos (+ adianta a letra)
   clock24: true,
@@ -819,53 +819,93 @@ function closeSearch() {
   $("#results").hidden = true;
 }
 
+// Busca nativa: SoundCloud e YouTube Music buscam no próprio serviço (pelo Rust).
+// Os outros, ou se a busca nativa falhar, usam o catálogo do Deezer.
+const NATIVE_SEARCH = { soundcloud: "soundcloud", ytmusic: "ytmusic", youtube: "ytmusic" };
+
+async function deezerSearch(q) {
+  const [tr, ar] = await Promise.all([
+    httpJson(`https://api.deezer.com/search?q=${enc(q)}&limit=16`),
+    httpJson(`https://api.deezer.com/search/artist?q=${enc(q)}&limit=10`),
+  ]);
+  return {
+    source: "deezer",
+    tracks: (tr?.data || []).map((t) => ({ title: t.title_short || t.title, artist: t.artist?.name || "", cover: t.album?.cover_medium || "", url: t.link })),
+    artists: (ar?.data || []).map((a) => ({ name: a.name, picture: a.picture_medium || "", url: a.link })),
+  };
+}
+
 async function runSearch(q) {
   q = q.trim();
   if (!q) return closeSearch();
   const seq = ++searchSeq;
+  const svc = settings.service;
   $("#stage").classList.add("searching");
   $("#results").hidden = false;
+  $("#resNote").textContent = "";
   $("#resTracks").innerHTML = skeleton(7);
-  $("#resArtists").innerHTML = skeleton(7);
+  $("#resArtists").innerHTML = skeleton(7, "round");
 
-  const enc = encodeURIComponent(q);
-  const [tr, ar] = await Promise.all([
-    httpJson(`https://api.deezer.com/search?q=${enc}&limit=16`),
-    httpJson(`https://api.deezer.com/search/artist?q=${enc}&limit=10`),
-  ]);
+  let res = null;
+  let note = "";
+  if (NATIVE_SEARCH[svc]) {
+    try {
+      res = await api.invoke("search_music", { service: NATIVE_SEARCH[svc], query: q });
+    } catch (e) {
+      note = `${SERVICES[svc].name} não respondeu, mostrando resultados do Deezer.`;
+      console.warn("busca nativa falhou:", e);
+    }
+  }
+  if (seq !== searchSeq) return;
+  if (!res) res = await deezerSearch(q);
   if (seq !== searchSeq) return;
 
-  const tracks = (tr?.data || []).map((t) => ({
-    title: t.title_short || t.title,
-    artist: t.artist?.name || "",
-    cover: t.album?.cover_medium || "",
-    link: t.link,
-  }));
-  const artists = (ar?.data || []).map((a) => ({ name: a.name, pic: a.picture_medium || "", link: a.link }));
+  const tracks = res.tracks || [];
+  const artists = res.artists || [];
+  // Link direto quando o resultado veio do mesmo serviço escolhido
+  const direct = res.source === "deezer" ? svc === "deezer" : true;
+  const fixUrl = (u) => (svc === "youtube" && u ? u.replace("://music.youtube.com/", "://www.youtube.com/") : u);
 
-  const svcName = esc(SERVICES[settings.service].name);
+  const svcName = esc(SERVICES[svc].name);
+  const fromName = res.source === "deezer" ? "Deezer" : SERVICES[res.source]?.name || "";
+  $("#resTitle").innerHTML = `Principais resultados${fromName ? ` <small>· ${esc(fromName)}</small>` : ""}`;
+  $("#resNote").textContent = note;
+
   $("#resTracks").innerHTML = tracks.length
     ? tracks
-        .map((t, i) => `<div class="res-tile" data-t="${i}" title="Abrir no ${svcName}"><img src="${esc(t.cover)}" alt="" loading="lazy" draggable="false"><b>${esc(t.title)}</b><span>${esc(t.artist)}</span></div>`)
+        .map(
+          (t, i) =>
+            `<div class="res-tile" data-t="${i}" title="Abrir no ${svcName}">${t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy" draggable="false">` : `<div class="sk"></div>`}<b>${esc(t.title)}</b><span>${esc(t.artist)}${t.durationMs ? ` · ${fmt(t.durationMs)}` : ""}</span></div>`,
+        )
         .join("")
     : `<div class="res-empty">Nada encontrado. Enter abre a busca direto no ${svcName}.</div>`;
   $("#resArtists").innerHTML = artists.length
     ? artists
-        .map((a, i) => `<div class="res-tile" data-a="${i}" title="Abrir no ${svcName}"><img src="${esc(a.pic)}" alt="" loading="lazy" draggable="false"><b>${esc(a.name)}</b></div>`)
+        .map(
+          (a, i) =>
+            `<div class="res-tile" data-a="${i}" title="Abrir no ${svcName}">${a.picture ? `<img src="${esc(a.picture)}" alt="" loading="lazy" draggable="false">` : `<div class="sk"></div>`}<b>${esc(a.name)}</b></div>`,
+        )
         .join("")
     : `<div class="res-empty">—</div>`;
 
+  const open = (query, url) => {
+    if (direct && url) {
+      api.invoke("open_url", { url: fixUrl(url) }).then(() => toast(`Abrindo no ${SERVICES[svc].name}…`)).catch((e) => toast(String(e)));
+    } else {
+      openInService(query);
+    }
+  };
   $("#resTracks").onclick = (e) => {
     const el = e.target.closest("[data-t]");
     if (!el) return;
     const t = tracks[+el.dataset.t];
-    openInService(`${t.title} ${t.artist}`, t.link);
+    open(`${t.title} ${t.artist}`, t.url);
   };
   $("#resArtists").onclick = (e) => {
     const el = e.target.closest("[data-a]");
     if (!el) return;
     const a = artists[+el.dataset.a];
-    openInService(a.name, a.link);
+    open(a.name, a.url);
   };
 }
 

@@ -24,7 +24,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Letra sincronizada** aparecendo em pedacinhos animados em cima do fundo, via [LRCLIB](https://lrclib.net).
 - **Relógio gigante** em fonte condensada, no estilo de tela de bloqueio.
 - **Fundo dinâmico** feito com a capa da música. A cor de destaque do app também muda conforme a capa.
-- **Busca com capas** (Deezer API): o resultado abre direto no Spotify, YouTube Music, SoundCloud, Apple Music ou Deezer.
+- **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…). O clique abre direto na música. Pros outros serviços, ou se a busca do site falhar, os resultados vêm do Deezer.
 - **Controles**: tocar/pausar, próxima, anterior e barra de progresso clicável.
 - **Wallpaper animado atrás dos ícones**, no estilo Wallpaper Engine. Mostra o relógio, a letra e a música tocando direto na área de trabalho.
 - **Biblioteca de wallpapers**: vídeo (mp4/webm), GIF ou imagem, mais o **Aurora**, um fundo animado embutido que muda de cor conforme a capa.
@@ -91,6 +91,8 @@ Pra mexer só no visual, sem compilar nada, use `npm run demo`. Ele abre o front
 ```
 
 O modo wallpaper usa o mesmo truque do Wallpaper Engine e do Lively: o Explorer cria uma camada chamada **WorkerW** entre o papel de parede e os ícones, e o app pendura uma segunda janela nela. A cada 1,2 s o Rust confere se o app em foco está em tela cheia, e o wallpaper congela enquanto estiver.
+
+A busca do SoundCloud usa a `api-v2` com o `client_id` público que o próprio site carrega. A do YouTube Music usa a API interna `youtubei/v1/search`, a mesma usada pela [ytmusicapi](https://github.com/sigma67/ytmusicapi). Nenhuma das duas é oficial: se o site mudar, o app mostra um aviso e cai pro Deezer.
 
 A posição da música é medida pelo app de origem e interpolada no front a cada frame. Cada verso da letra (LRC) é quebrado em pedaços de 1–3 palavras, e o tempo do verso é distribuído entre eles pelo tamanho de cada pedaço.
 

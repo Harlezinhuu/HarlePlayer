@@ -5,6 +5,7 @@ mod detect;
 mod discord;
 mod media;
 mod net;
+mod search;
 mod wallpaper;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
@@ -53,6 +54,14 @@ async fn set_wallpaper_mode(app: AppHandle, enabled: bool) -> Result<(), String>
         let _ = tray.wallpaper_item.set_checked(on);
     }
     result
+}
+
+/// Busca direto no SoundCloud ou no YouTube Music.
+#[tauri::command]
+async fn search_music(service: String, query: String) -> Result<search::SearchResult, String> {
+    tauri::async_runtime::spawn_blocking(move || search::search(&service, &query))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Atualiza o "Ouvindo …" no perfil do Discord.
@@ -187,6 +196,7 @@ fn main() {
             http_get,
             open_url,
             set_wallpaper_mode,
+            search_music,
             discord_set,
             discord_clear,
             discord_status,
