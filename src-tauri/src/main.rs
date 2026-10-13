@@ -6,7 +6,9 @@ mod discord;
 mod media;
 mod net;
 mod search;
+mod updater;
 mod wallpaper;
+mod ytdlp;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -72,6 +74,33 @@ async fn soundcloud_audio(url: String) -> Result<tauri::ipc::Response, String> {
         .await
         .map_err(|e| e.to_string())??;
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Reserva do YouTube: áudio pelo yt-dlp quando o vídeo bloqueia o player embutido.
+#[tauri::command]
+async fn youtube_audio(app: AppHandle, url: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = tauri::async_runtime::spawn_blocking(move || ytdlp::audio(&app, &url))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Confere se tem versão nova nas Releases do GitHub.
+#[tauri::command]
+async fn check_update() -> Result<updater::UpdateInfo, String> {
+    tauri::async_runtime::spawn_blocking(updater::check)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Baixa a versão nova, fecha o app e deixa o instalador rodando (ele reabre o app no fim).
+#[tauri::command]
+async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || updater::download_and_schedule(&url))
+        .await
+        .map_err(|e| e.to_string())??;
+    app.exit(0);
+    Ok(())
 }
 
 /// Atualiza o "Ouvindo …" no perfil do Discord.
@@ -207,6 +236,9 @@ fn main() {
             set_wallpaper_mode,
             search_music,
             soundcloud_audio,
+            youtube_audio,
+            check_update,
+            install_update,
             discord_set,
             discord_clear,
             discord_status,

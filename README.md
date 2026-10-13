@@ -25,13 +25,14 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Letra sincronizada** aparecendo em pedacinhos animados em cima do fundo, via [LRCLIB](https://lrclib.net).
 - **Relógio gigante** em fonte condensada, no estilo de tela de bloqueio.
 - **Fundo dinâmico** feito com a capa da música. A cor de destaque do app também muda conforme a capa.
-- **Toca dentro do próprio app**, sem abrir navegador: SoundCloud (o áudio é baixado e tocado aqui) e YouTube Music / YouTube (pelo player oficial do YouTube, escondido). Fila com próxima/anterior, avança sozinho e funciona com as teclas de mídia.
+- **Toca dentro do próprio app**, sem abrir navegador: SoundCloud (o áudio é baixado e tocado aqui) e YouTube Music / YouTube (pelo player oficial do YouTube, escondido; se o vídeo bloquear, o áudio vem pelo [yt-dlp](https://github.com/yt-dlp/yt-dlp), baixado e atualizado sozinho). Fila com próxima/anterior, avança sozinho e funciona com as teclas de mídia.
 - **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…). O clique toca a música na hora. Pros outros serviços, ou se a busca do site falhar, os resultados vêm do Deezer.
 - **Controles**: tocar/pausar, próxima, anterior e barra de progresso clicável.
 - **Wallpaper animado atrás dos ícones**, no estilo Wallpaper Engine. Mostra o relógio, a letra e a música tocando direto na área de trabalho.
 - **Biblioteca de wallpapers**: vídeo (mp4/webm), GIF ou imagem, mais o **Aurora**, um fundo animado embutido que muda de cor conforme a capa.
 - **Discord Rich Presence**: mostra "Ouvindo SoundCloud" (ou YouTube Music, YouTube…) no seu perfil, com capa, artista, barra de tempo e botão "Ouvir no …". Detecta sozinho onde a música está tocando, até no navegador.
 - Fica na **bandeja do sistema** quando você fecha.
+- **Se atualiza sozinho**: avisa quando sai versão nova nas Releases e instala com um clique.
 
 <img src="docs/search.jpg" alt="Busca com resultados e artistas" />
 

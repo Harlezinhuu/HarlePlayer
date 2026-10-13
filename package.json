@@ -1,7 +1,7 @@
 {
   "name": "harle-player",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Player de música estético pro desktop — Spotify, YouTube Music, SoundCloud e Apple Music",
   "scripts": {
     "tauri": "tauri",

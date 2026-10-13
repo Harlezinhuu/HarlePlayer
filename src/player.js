@@ -13,6 +13,7 @@ export function sniffAudioType(bytes) {
   if (b.length > 8 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "audio/mp4"; // "ftyp"
   if (b.length > 4 && b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return "audio/ogg"; // "OggS"
   if (b.length > 4 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return "audio/wav"; // "RIFF"
+  if (b.length > 4 && b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "audio/webm"; // EBML
   return "audio/mpeg";
 }
 
@@ -88,8 +89,9 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
     next(true);
   });
 
-  async function playSoundCloud(track, my) {
-    const buf = await api.invoke("soundcloud_audio", { url: track.url });
+  // Baixa o áudio pelo Rust (SoundCloud direto; YouTube pelo yt-dlp) e toca no <audio>.
+  async function playDownloaded(cmd, track, my) {
+    const buf = await api.invoke(cmd, { url: track.url });
     if (my !== seq) return;
     const bytes = new Uint8Array(buf);
     if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -118,12 +120,7 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
               if (e.data === 0) return next(true);
               emit();
             },
-            onError: (e) => {
-              if (engine !== "yt") return;
-              const embedBlocked = e.data === 101 || e.data === 150 || e.data === 153;
-              toast(embedBlocked ? "Esse vídeo não deixa tocar fora do YouTube, pulando…" : "Não consegui tocar esse vídeo, pulando…", 3500);
-              next(true);
-            },
+            onError: (e) => youtubeFailed(e.data),
           },
         }));
       if (window.YT?.Player) return done();
@@ -137,6 +134,27 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
       document.head.appendChild(s);
     });
     return ytReady;
+  }
+
+  // Player oficial recusou (vídeo bloqueia tocar fora do YouTube): tenta pelo yt-dlp.
+  async function youtubeFailed(code) {
+    if (engine !== "yt" || !cur) return;
+    const my = seq;
+    try { yt.stopVideo(); } catch {}
+    ytPlaying = false;
+    engine = null;
+    loading = true;
+    emit();
+    toast("Esse vídeo bloqueia o player do YouTube, tocando pelo modo alternativo… (na 1ª vez demora um pouco)", 4500);
+    try {
+      await playDownloaded("youtube_audio", cur, my);
+      if (my === seq) emit();
+    } catch (err) {
+      if (my !== seq) return;
+      loading = false;
+      toast(`Não deu pra tocar (${String(err?.message || err || code)}), pulando…`, 4500);
+      next(true);
+    }
   }
 
   async function playYouTube(track, my) {
@@ -167,8 +185,16 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
     engine = null;
     emit();
     try {
-      if (cur.service === "soundcloud") await playSoundCloud(cur, my);
-      else if (cur.service === "ytmusic" || cur.service === "youtube") await playYouTube(cur, my);
+      if (cur.service === "soundcloud") await playDownloaded("soundcloud_audio", cur, my);
+      else if (cur.service === "ytmusic" || cur.service === "youtube") {
+        try {
+          await playYouTube(cur, my);
+        } catch {
+          // player do YouTube nem carregou → vai direto pelo yt-dlp
+          if (my !== seq) return;
+          await playDownloaded("youtube_audio", cur, my);
+        }
+      }
       else throw new Error("Esse serviço não toca dentro do app");
     } catch (e) {
       if (my !== seq) return;

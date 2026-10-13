@@ -26,10 +26,18 @@ jobs:
           set -o pipefail
           cargo test --manifest-path src-tauri/Cargo.toml ao_vivo -- --ignored --nocapture --test-threads=1 2>&1 | tee resultado.txt
 
+      # yt-dlp (reserva do YouTube): só informativo, o YouTube costuma bloquear IP de servidor
+      - name: yt-dlp (informativo)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml manual_ytdlp -- --ignored --nocapture 2>&1 | tee -a resultado.txt
+
       # Mostra o resultado como avisos na página do workflow (dá pra ler sem baixar o log)
       - name: Resumo
         if: always()
         shell: bash
         run: |
-          grep -aE "^test |SoundCloud:|YouTube Music:|áudio de|não tocou|panicked|left:|right:|falhou" resultado.txt | head -40 |
+          grep -aE "^test |SoundCloud:|YouTube Music:|áudio de|não tocou|panicked|left:|right:|falhou|yt-dlp" resultado.txt | head -40 |
             while IFS= read -r l; do echo "::notice::$l"; done

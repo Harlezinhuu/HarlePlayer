@@ -178,12 +178,20 @@
     </div>
 
     <div class="panel-foot">
-      <span>Criado por <b>Harle</b></span>
+      <span>Criado por <b>Harle</b> · <span id="appVersion">v—</span> · <a href="#" id="btnCheckUpdate">Procurar atualização</a></span>
       <a href="#" id="lnkGithub">GitHub</a>
     </div>
   </section>
 
   <div id="toast" role="status"></div>
+
+  <!-- aviso de versão nova -->
+  <div id="updateBar" class="glass" hidden>
+    <span class="update-dot"></span>
+    <span id="updateText">Versão nova disponível</span>
+    <button id="btnUpdate" class="btn primary">Atualizar</button>
+    <button id="btnUpdateClose" class="win-btn" aria-label="Fechar"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+  </div>
 
   <!-- player do YouTube escondido (o áudio do YouTube Music toca por ele) -->
   <div id="ytWrap" aria-hidden="true"><div id="ytHost"></div></div>

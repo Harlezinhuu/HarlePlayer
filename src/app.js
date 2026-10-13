@@ -755,7 +755,12 @@ function currentChunk(pos) {
 // ===================================================================
 let lastSec = -1;
 function frame() {
-  requestAnimationFrame(frame);
+  if (!IS_WALLPAPER) {
+  setTimeout(() => checkUpdate(false), 4000);
+  setInterval(() => checkUpdate(false), 6 * 3600e3);
+}
+
+requestAnimationFrame(frame);
   if (paused) return;
   const pos = positionNow();
   const pct = media.durationMs > 0 ? (pos / media.durationMs) * 100 : 0;
@@ -1251,6 +1256,45 @@ function onMedia(s, fromLocal = false) {
 }
 
 // ===================================================================
+// Atualizações (GitHub Releases)
+// ===================================================================
+let pendingUpdate = null;
+async function checkUpdate(manual = false) {
+  try {
+    const info = await api.invoke("check_update");
+    if (!info) return manual && toast("Modo demo: sem atualizações");
+    $("#appVersion").textContent = `v${info.current}`;
+    if (info.available) {
+      pendingUpdate = info;
+      $("#updateText").textContent = `Versão ${info.latest} disponível`;
+      $("#updateBar").hidden = false;
+    } else if (manual) {
+      toast(`Você já está na versão mais nova (v${info.current})`);
+    }
+  } catch (e) {
+    if (manual) toast(`Não consegui procurar atualização: ${e}`);
+  }
+}
+$("#btnUpdate").addEventListener("click", async () => {
+  if (!pendingUpdate?.url) return;
+  $("#btnUpdate").disabled = true;
+  $("#updateText").textContent = `Baixando a versão ${pendingUpdate.latest}…`;
+  try {
+    await api.invoke("install_update", { url: pendingUpdate.url });
+    // o app fecha sozinho, instala e abre de novo
+  } catch (e) {
+    $("#btnUpdate").disabled = false;
+    $("#updateText").textContent = `Versão ${pendingUpdate.latest} disponível`;
+    toast(`Falhou ao atualizar: ${e}`, 4500);
+  }
+});
+$("#btnUpdateClose").addEventListener("click", () => ($("#updateBar").hidden = true));
+$("#btnCheckUpdate").addEventListener("click", (e) => {
+  e.preventDefault();
+  checkUpdate(true);
+});
+
+// ===================================================================
 // Início
 // ===================================================================
 renderService();
@@ -1276,6 +1320,11 @@ if (!IS_WALLPAPER && settings.wallpaperMode) {
     saveSettings();
     renderSettings();
   });
+}
+
+if (!IS_WALLPAPER) {
+  setTimeout(() => checkUpdate(false), 4000);
+  setInterval(() => checkUpdate(false), 6 * 3600e3);
 }
 
 requestAnimationFrame(frame);

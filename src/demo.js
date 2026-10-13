@@ -119,6 +119,12 @@ export function createDemoApi() {
             artists: TRACKS.map((t) => ({ name: t.artist, picture: t.thumb, url: "https://soundcloud.com/" })),
           };
         }
+        case "check_update":
+          return { available: location.search.includes("update"), current: "0.3.0", latest: "0.4.0", url: "https://github.com/Harlezinhuu/HarlePlayer/releases/download/0.4.0/x_x64-setup.exe" };
+        case "install_update":
+          await new Promise((r) => setTimeout(r, 800));
+          throw new Error("demo: não instala de verdade");
+        case "youtube_audio":
         case "soundcloud_audio": {
           await new Promise((r) => setTimeout(r, 500));
           return toneWav(6);

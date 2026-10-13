@@ -86,7 +86,7 @@ fn http_get(url: &str) -> Result<String, HttpErr> {
 /// Limite de tamanho de um áudio baixado (mixes longas de DJ cabem).
 const MAX_AUDIO: usize = 250 * 1024 * 1024;
 
-fn http_bytes(url: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn http_bytes(url: &str) -> Result<Vec<u8>, String> {
     use std::io::Read;
     let resp = ureq::get(url)
         .set("User-Agent", BROWSER_UA)

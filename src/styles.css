@@ -428,3 +428,14 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
 
 /* player do YouTube escondido */
 #ytWrap { position: fixed; left: -420px; bottom: 0; width: 200px; height: 200px; opacity: 0; pointer-events: none; }
+
+/* aviso de atualização */
+#updateBar {
+  position: fixed; z-index: 45; top: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; border-radius: 14px;
+  font-size: 13px; background: var(--glass-strong); animation: rise .35s var(--ease);
+}
+.update-dot { width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--accent)); box-shadow: 0 0 10px rgb(var(--accent)); }
+.btn.primary { background: rgb(var(--accent)); border-color: transparent; color: #0b1020; font-weight: 700; }
+.btn.primary:disabled { opacity: .6; }
+body.mode-wallpaper #updateBar { display: none !important; }
