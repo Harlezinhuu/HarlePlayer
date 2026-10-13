@@ -13,6 +13,13 @@ const api = T
     }
   : (await import("./demo.js")).createDemoApi();
 
+// A mesma página roda em duas janelas: o player ("main") e o wallpaper
+// atrás dos ícones ("wallpaper"). No navegador, use ?wallpaper pra ver o layout.
+const IS_WALLPAPER = T
+  ? T.window.getCurrentWindow().label === "wallpaper"
+  : new URLSearchParams(location.search).has("wallpaper");
+if (IS_WALLPAPER) document.body.classList.add("mode-wallpaper");
+
 // ===================================================================
 // Configurações (salvas no próprio app)
 // ===================================================================
@@ -38,9 +45,13 @@ const DEFAULTS = {
   lyrics: true,
   lyricsOffset: 0, // segundos (+ adianta a letra)
   clock24: true,
-  widget: false,
+  wallpaperMode: false, // wallpaper animado atrás dos ícones
+  wallpaperId: "builtin:aurora",
+  pauseFullscreen: true,
+  pauseMaximized: false,
 };
 const settings = { ...DEFAULTS, ...store.get("hp.settings", {}) };
+delete settings.widget; // opção antiga
 const saveSettings = () => store.set("hp.settings", settings);
 
 const SERVICES = {
@@ -162,6 +173,7 @@ function hslToRgb(h, s, l) {
 }
 function setAccent(rgb) {
   const [h, s] = rgbToHsl(...rgb);
+  accentHue = h;
   const accent = hslToRgb(h, Math.max(0.55, Math.min(s, 0.9)), 0.64);
   const lyric = hslToRgb(h, Math.max(0.6, Math.min(s, 0.95)), 0.8);
   document.documentElement.style.setProperty("--accent", accent.join(", "));
@@ -228,66 +240,220 @@ function updateArt(thumb) {
   accentFrom(thumb);
 }
 
+// ---------- banco local (IndexedDB) com os arquivos de wallpaper ----------
 const idb = {
+  _db: null,
   open() {
-    return new Promise((res, rej) => {
-      const r = indexedDB.open("harle-player", 1);
-      r.onupgradeneeded = () => r.result.createObjectStore("files");
-      r.onsuccess = () => res(r.result);
+    if (this._db) return this._db;
+    this._db = new Promise((res, rej) => {
+      const r = indexedDB.open("harle-player", 2);
+      r.onupgradeneeded = () => {
+        const db = r.result;
+        if (!db.objectStoreNames.contains("files")) db.createObjectStore("files");
+        if (!db.objectStoreNames.contains("wallpapers")) db.createObjectStore("wallpapers", { keyPath: "id" });
+      };
+      r.onsuccess = () => {
+        r.result.onversionchange = () => r.result.close();
+        res(r.result);
+      };
       r.onerror = () => rej(r.error);
     });
+    return this._db;
   },
-  async get(k) {
+  async req(storeName, mode, fn) {
     const db = await this.open();
     return new Promise((res, rej) => {
-      const q = db.transaction("files").objectStore("files").get(k);
-      q.onsuccess = () => res(q.result);
-      q.onerror = () => rej(q.error);
-    });
-  },
-  async set(k, v) {
-    const db = await this.open();
-    return new Promise((res, rej) => {
-      const tx = db.transaction("files", "readwrite");
-      tx.objectStore("files").put(v, k);
-      tx.oncomplete = () => res();
+      const tx = db.transaction(storeName, mode);
+      const q = fn(tx.objectStore(storeName));
+      tx.oncomplete = () => res(q?.result);
       tx.onerror = () => rej(tx.error);
     });
   },
+  get: (s, k) => idb.req(s, "readonly", (st) => st.get(k)),
+  all: (s) => idb.req(s, "readonly", (st) => st.getAll()),
+  put: (s, v) => idb.req(s, "readwrite", (st) => st.put(v)),
+  del: (s, k) => idb.req(s, "readwrite", (st) => st.delete(k)),
 };
 
+// ---------- biblioteca de wallpapers ----------
+const BUILTINS = [
+  { id: "builtin:aurora", name: "Aurora", builtin: "aurora" },
+  { id: "builtin:cover", name: "Capa da música", builtin: "cover" },
+];
+let library = [];
+
+async function loadLibrary() {
+  try {
+    library = (await idb.all("wallpapers")) || [];
+  } catch {
+    library = [];
+  }
+  library.sort((a, b) => b.added - a.added);
+}
+
+function videoThumb(url) {
+  return new Promise((resolve) => {
+    const v = document.createElement("video");
+    let done = false;
+    const finish = (val) => {
+      if (!done) {
+        done = true;
+        resolve(val);
+      }
+    };
+    v.muted = true;
+    v.preload = "auto";
+    v.onloadeddata = () => (v.currentTime = Math.min(1, (v.duration || 2) / 2));
+    v.onseeked = () => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = 320;
+        c.height = Math.round((v.videoHeight / Math.max(1, v.videoWidth)) * 320) || 180;
+        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+        finish(c.toDataURL("image/jpeg", 0.8));
+      } catch {
+        finish(null);
+      }
+    };
+    v.onerror = () => finish(null);
+    setTimeout(() => finish(null), 8000);
+    v.src = url;
+  });
+}
+
+async function addWallpaperFile(blob, name, type) {
+  const url = URL.createObjectURL(blob);
+  const isVideo = (type || "").startsWith("video/");
+  const thumb = isVideo ? await videoThumb(url) : await shrinkImage(url, 320);
+  URL.revokeObjectURL(url);
+  const rec = { id: `wp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name, type, blob, thumb, added: Date.now() };
+  await idb.put("wallpapers", rec);
+  await loadLibrary();
+  settings.wallpaperId = rec.id;
+  settings.bg = "custom";
+  saveSettings();
+}
+
+// Versão anterior guardava um único fundo; move ele pra biblioteca.
+async function migrateOldBackground() {
+  try {
+    const old = await idb.get("files", "bg");
+    if (!old?.blob) return;
+    await addWallpaperFile(old.blob, old.name || "Fundo", old.type || "image/*");
+    await idb.req("files", "readwrite", (st) => st.delete("bg"));
+  } catch {}
+}
+
+// ---------- "Aurora": wallpaper animado embutido (canvas) ----------
+let auroraRaf = 0;
+let accentHue = 0.6;
+let paused = false;
+const auroraCanvas = $("#bgCanvas");
+const fitAurora = () => {
+  auroraCanvas.width = Math.ceil(innerWidth / 8);
+  auroraCanvas.height = Math.ceil(innerHeight / 8);
+};
+window.addEventListener("resize", fitAurora);
+
+function startAurora() {
+  stopAurora();
+  auroraCanvas.hidden = false;
+  fitAurora();
+  const ctx = auroraCanvas.getContext("2d");
+  const blobs = Array.from({ length: 6 }, (_, i) => ({
+    px: Math.random() * 6.28,
+    py: Math.random() * 6.28,
+    sp: 0.6 + Math.random() * 0.8,
+    r: 0.35 + Math.random() * 0.35,
+    dh: (i - 2.5) * 0.05,
+    l: 0.42 + Math.random() * 0.2,
+  }));
+  let last = 0;
+  const draw = (t) => {
+    auroraRaf = requestAnimationFrame(draw);
+    if (paused || t - last < 40) return; // ~25 fps: leve pra GPU
+    last = t;
+    const w = auroraCanvas.width, h = auroraCanvas.height, s = t / 1000;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "#04060d";
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = "lighter";
+    for (const b of blobs) {
+      const x = (0.5 + 0.42 * Math.sin(s * 0.11 * b.sp + b.px)) * w;
+      const y = (0.5 + 0.38 * Math.cos(s * 0.09 * b.sp + b.py)) * h;
+      const r = b.r * Math.max(w, h) * (0.9 + 0.1 * Math.sin(s * 0.4 + b.px));
+      const [R, G, B] = hslToRgb((((accentHue + b.dh) % 1) + 1) % 1, 0.75, b.l);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(${R},${G},${B},0.55)`);
+      g.addColorStop(1, `rgba(${R},${G},${B},0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+    }
+  };
+  auroraRaf = requestAnimationFrame(draw);
+}
+function stopAurora() {
+  cancelAnimationFrame(auroraRaf);
+  auroraRaf = 0;
+  auroraCanvas.hidden = true;
+}
+
+// ---------- aplica o fundo ----------
 let bgObjectUrl = null;
 async function applyBackground() {
   const img = $("#bgImage"), vid = $("#bgVideo");
   img.hidden = vid.hidden = true;
   vid.pause();
-  let mode = settings.bg;
-  let file = null;
+  stopAurora();
+
+  // Na área de trabalho vale sempre o wallpaper escolhido;
+  // no player vale a opção "Fundo do player".
+  let mode = IS_WALLPAPER ? "custom" : settings.bg;
+  let rec = null;
   if (mode === "custom") {
-    try { file = await idb.get("bg"); } catch {}
-    if (!file) mode = "dynamic";
+    const id = settings.wallpaperId || BUILTINS[0].id;
+    rec = BUILTINS.find((b) => b.id === id) || null;
+    if (!rec) {
+      try { rec = await idb.get("wallpapers", id); } catch {}
+    }
+    if (!rec) rec = BUILTINS[0];
+    if (rec.builtin === "cover") mode = "dynamic";
   }
+
   document.body.classList.remove("bg-dynamic", "bg-custom", "bg-transparent");
   document.body.classList.add(`bg-${mode}`);
-  $("#fileName").textContent = file ? file.name : "Nenhum arquivo";
-  if (mode === "custom" && file) {
-    if (bgObjectUrl) URL.revokeObjectURL(bgObjectUrl);
-    bgObjectUrl = URL.createObjectURL(file.blob);
-    if (file.type.startsWith("video/")) {
-      vid.src = bgObjectUrl;
-      vid.hidden = false;
-      vid.play().catch(() => {});
-    } else {
-      img.src = bgObjectUrl;
-      img.hidden = false;
-    }
+  if (bgObjectUrl) {
+    URL.revokeObjectURL(bgObjectUrl);
+    bgObjectUrl = null;
   }
+  if (mode !== "custom" || !rec) return;
+  if (rec.builtin === "aurora") return startAurora();
+
+  bgObjectUrl = URL.createObjectURL(rec.blob);
+  if ((rec.type || "").startsWith("video/")) {
+    vid.src = bgObjectUrl;
+    vid.hidden = false;
+    if (!paused) vid.play().catch(() => {});
+  } else {
+    img.src = bgObjectUrl;
+    img.hidden = false;
+  }
+}
+
+// Pausa tudo (vídeo, aurora, animações) — usado quando um jogo está em tela cheia.
+function setPaused(on) {
+  if (paused === on) return;
+  paused = on;
+  document.body.classList.toggle("paused", on);
+  const vid = $("#bgVideo");
+  if (!vid.hidden) on ? vid.pause() : vid.play().catch(() => {});
 }
 
 // ===================================================================
 // Histórico + "Continuar ouvindo"
 // ===================================================================
 function saveHistory() {
+  if (IS_WALLPAPER) return; // só o player grava o histórico
   store.set("hp.history", history.slice(0, 24));
 }
 
@@ -455,6 +621,13 @@ function renderMini() {
   if (cover) mc.src = cover;
   else mc.removeAttribute("src");
   $("#tDur").textContent = fmt(media.durationMs);
+  // cartão "tocando agora" do wallpaper
+  document.body.classList.toggle("has-media", !!curKey);
+  $("#ncTitle").textContent = curKey ? media.title : "";
+  $("#ncArtist").textContent = curKey ? media.artist || media.album || "" : "";
+  const nc = $("#ncCover");
+  if (cover) nc.src = cover;
+  else nc.removeAttribute("src");
   document.body.classList.toggle("playing", !!(media.available && media.playing));
 }
 
@@ -603,16 +776,18 @@ function currentChunk(pos) {
 // ===================================================================
 let lastSec = -1;
 function frame() {
+  requestAnimationFrame(frame);
+  if (paused) return;
   const pos = positionNow();
   const pct = media.durationMs > 0 ? (pos / media.durationMs) * 100 : 0;
   $("#progressFill").style.width = `${pct}%`;
+  $("#ncFill").style.width = `${pct}%`;
   const sec = Math.floor(pos / 1000);
   if (sec !== lastSec) {
     lastSec = sec;
     $("#tCur").textContent = fmt(pos);
   }
   if (settings.lyrics) showChunk(currentChunk(pos + settings.lyricsOffset * 1000));
-  requestAnimationFrame(frame);
 }
 
 // ===================================================================
@@ -743,14 +918,31 @@ document.addEventListener("click", (e) => {
 // ===================================================================
 function renderSettings() {
   document.querySelectorAll("#segBg button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.bg));
-  $("#rowFile").style.display = settings.bg === "custom" ? "" : "none";
   $("#swLyrics").classList.toggle("on", settings.lyrics);
   $("#sw24").classList.toggle("on", settings.clock24);
-  $("#swWidget").classList.toggle("on", settings.widget);
+  $("#swWallpaper").classList.toggle("on", settings.wallpaperMode);
+  $("#swPauseFull").classList.toggle("on", settings.pauseFullscreen);
+  $("#swPauseMax").classList.toggle("on", settings.pauseMaximized);
   $("#offVal").textContent = `${settings.lyricsOffset > 0 ? "+" : ""}${settings.lyricsOffset.toFixed(1).replace(".", ",")} s`;
   $("#btnLyrics").classList.toggle("on", settings.lyrics);
   document.body.classList.toggle("no-lyrics", !settings.lyrics);
-  document.body.classList.toggle("widget", settings.widget);
+  renderLibrary();
+}
+
+function renderLibrary() {
+  const sel = settings.wallpaperId || BUILTINS[0].id;
+  const tiles = [
+    ...BUILTINS.map(
+      (b) => `<button class="lib-tile builtin-${b.builtin}${sel === b.id ? " sel" : ""}" data-id="${b.id}" title="${esc(b.name)}"><span>${esc(b.name)}</span></button>`,
+    ),
+    ...library.map((w) => {
+      const bg = w.thumb ? ` style="background-image:url('${w.thumb}')"` : "";
+      const badge = (w.type || "").startsWith("video/") ? `<i class="lib-badge">▶</i>` : "";
+      return `<button class="lib-tile${sel === w.id ? " sel" : ""}" data-id="${esc(w.id)}" title="${esc(w.name)}"${bg}>${badge}<span>${esc(w.name)}</span><i class="lib-del" data-del="${esc(w.id)}" title="Remover">×</i></button>`;
+    }),
+    `<button class="lib-tile lib-add" data-add="1" title="Adicionar vídeo, GIF ou imagem"><b>+</b><span>Adicionar</span></button>`,
+  ];
+  $("#lib").innerHTML = tiles.join("");
 }
 
 $("#btnSettings").addEventListener("click", () => {
@@ -768,28 +960,50 @@ $("#segBg").addEventListener("click", (e) => {
   saveSettings();
   renderSettings();
   applyBackground();
-  if (settings.bg === "custom") idb.get("bg").then((f) => !f && $("#fileInput").click()).catch(() => {});
 });
 $("#segService").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-v]");
   if (b) setService(b.dataset.v);
 });
-$("#btnPickFile").addEventListener("click", () => $("#fileInput").click());
+
+$("#lib").addEventListener("click", async (e) => {
+  const del = e.target.closest("[data-del]");
+  if (del) {
+    e.stopPropagation();
+    try { await idb.del("wallpapers", del.dataset.del); } catch {}
+    if (settings.wallpaperId === del.dataset.del) settings.wallpaperId = BUILTINS[0].id;
+    saveSettings();
+    await loadLibrary();
+    renderLibrary();
+    applyBackground();
+    return;
+  }
+  if (e.target.closest("[data-add]")) return $("#fileInput").click();
+  const tile = e.target.closest("[data-id]");
+  if (!tile) return;
+  settings.wallpaperId = tile.dataset.id;
+  settings.bg = "custom"; // mostra no player também, pra ver na hora
+  saveSettings();
+  renderSettings();
+  applyBackground();
+});
+
 $("#fileInput").addEventListener("change", async (e) => {
   const f = e.target.files?.[0];
+  e.target.value = "";
   if (!f) return;
+  if (f.size > 1024 * 1024 * 1024) return toast("Arquivo grande demais (máx. 1 GB)");
+  toast("Adicionando wallpaper…", 6000);
   try {
-    await idb.set("bg", { blob: f, name: f.name, type: f.type || "image/*" });
-    settings.bg = "custom";
-    saveSettings();
+    await addWallpaperFile(f, f.name.replace(/\.[^.]+$/, ""), f.type || "image/*");
     renderSettings();
     applyBackground();
-    toast("Fundo atualizado");
+    toast("Wallpaper adicionado");
   } catch {
     toast("Não deu pra salvar esse arquivo");
   }
-  e.target.value = "";
 });
+
 const toggleLyrics = () => {
   settings.lyrics = !settings.lyrics;
   if (!settings.lyrics) showChunk("");
@@ -811,18 +1025,36 @@ const stepOffset = (d) => {
 };
 $("#offMinus").addEventListener("click", () => stepOffset(-0.1));
 $("#offPlus").addEventListener("click", () => stepOffset(0.1));
-$("#swWidget").addEventListener("click", () => setWidget(!settings.widget));
+$("#swWallpaper").addEventListener("click", () => setWallpaperMode(!settings.wallpaperMode));
+$("#swPauseFull").addEventListener("click", () => {
+  settings.pauseFullscreen = !settings.pauseFullscreen;
+  saveSettings();
+  renderSettings();
+});
+$("#swPauseMax").addEventListener("click", () => {
+  settings.pauseMaximized = !settings.pauseMaximized;
+  saveSettings();
+  renderSettings();
+});
 $("#lnkGithub").addEventListener("click", (e) => {
   e.preventDefault();
   api.invoke("open_url", { url: "https://github.com/Harlezinhuu" }).catch(() => {});
 });
 
-function setWidget(on, fromTray = false) {
-  settings.widget = on;
+function setWallpaperMode(on, fromTray = false) {
+  settings.wallpaperMode = on;
   saveSettings();
   renderSettings();
-  if (!fromTray) api.invoke("set_widget_mode", { enabled: on }).catch((e) => toast(String(e)));
-  if (on && !fromTray) toast("Modo widget ligado — pra sair, use o ícone na bandeja", 3600);
+  if (fromTray) return;
+  api
+    .invoke("set_wallpaper_mode", { enabled: on })
+    .then(() => on && toast("Wallpaper ligado — minimize as janelas pra ver 👀", 3200))
+    .catch((err) => {
+      settings.wallpaperMode = false;
+      saveSettings();
+      renderSettings();
+      toast(String(err), 4500);
+    });
 }
 
 // ===================================================================
@@ -903,13 +1135,31 @@ function onMedia(s) {
 // Início
 // ===================================================================
 renderService();
+if (!IS_WALLPAPER) await migrateOldBackground();
+await loadLibrary();
 renderSettings();
 applyBackground();
 render();
 
 api.listen("media-update", onMedia);
-api.listen("widget-mode", (on) => setWidget(!!on, true));
+if (IS_WALLPAPER) {
+  // Janela do wallpaper: pausa com jogo em tela cheia e recarrega quando o player muda algo.
+  api.listen("desktop-state", (st) =>
+    setPaused(!!((settings.pauseFullscreen && st.fullscreen) || (settings.pauseMaximized && st.maximized))),
+  );
+  window.addEventListener("storage", (e) => {
+    if (e.key === "hp.settings") location.reload();
+  });
+} else {
+  api.listen("wallpaper-mode", (on) => setWallpaperMode(!!on, true));
+}
 api.invoke("get_media").then(onMedia).catch(() => {});
-if (settings.widget) api.invoke("set_widget_mode", { enabled: true }).catch(() => {});
+if (!IS_WALLPAPER && settings.wallpaperMode) {
+  api.invoke("set_wallpaper_mode", { enabled: true }).catch(() => {
+    settings.wallpaperMode = false;
+    saveSettings();
+    renderSettings();
+  });
+}
 
 requestAnimationFrame(frame);

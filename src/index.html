@@ -16,6 +16,7 @@
     <div class="bg-art" id="bgArtB"></div>
     <img id="bgImage" alt="" hidden />
     <video id="bgVideo" autoplay muted loop playsinline hidden></video>
+    <canvas id="bgCanvas" hidden></canvas>
     <div class="bg-shade"></div>
     <div class="bg-grain"></div>
   </div>
@@ -39,6 +40,17 @@
   <section id="clock">
     <div id="date"></div>
     <div id="time">0:00</div>
+  </section>
+
+  <!-- ===== Tocando agora (só no modo wallpaper) ===== -->
+  <section id="nowCard" class="glass">
+    <img id="ncCover" alt="" />
+    <div class="nc-text">
+      <div id="ncTitle"></div>
+      <div id="ncArtist"></div>
+      <div class="nc-bar"><div id="ncFill"></div></div>
+    </div>
+    <div class="eq"><i></i><i></i><i></i></div>
   </section>
 
   <!-- ===== Continuar ouvindo ===== -->
@@ -113,16 +125,30 @@
       <button id="btnCloseSettings" class="win-btn" aria-label="Fechar"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
     </div>
 
-    <label class="row-label">Fundo</label>
+    <label class="row-label">Wallpapers</label>
+    <div id="lib" class="lib"></div>
+    <input id="fileInput" type="file" accept="video/mp4,video/webm,image/*" hidden />
+    <p class="hint">Vídeo (mp4/webm), GIF ou imagem. Fica salvo no app.</p>
+
+    <label class="row-label">Área de trabalho</label>
+    <div class="row toggle-row">
+      <span>Wallpaper animado <small class="muted">(atrás dos ícones)</small></span>
+      <button class="switch" id="swWallpaper" role="switch"></button>
+    </div>
+    <div class="row toggle-row">
+      <span>Pausar com jogo em tela cheia</span>
+      <button class="switch" id="swPauseFull" role="switch"></button>
+    </div>
+    <div class="row toggle-row">
+      <span>Pausar com janela maximizada</span>
+      <button class="switch" id="swPauseMax" role="switch"></button>
+    </div>
+
+    <label class="row-label">Fundo do player</label>
     <div class="seg" id="segBg">
       <button data-v="dynamic">Capa da música</button>
-      <button data-v="custom">Imagem / vídeo</button>
+      <button data-v="custom">Wallpaper</button>
       <button data-v="transparent">Transparente</button>
-    </div>
-    <div class="row" id="rowFile">
-      <button id="btnPickFile" class="btn">Escolher arquivo…</button>
-      <span id="fileName" class="muted">Nenhum arquivo</span>
-      <input id="fileInput" type="file" accept="image/*,video/mp4,video/webm" hidden />
     </div>
 
     <label class="row-label">Busca abre no</label>
@@ -143,10 +169,6 @@
     <div class="row toggle-row">
       <span>Relógio 24 horas</span>
       <button class="switch" id="sw24" role="switch"></button>
-    </div>
-    <div class="row toggle-row">
-      <span>Modo widget <small class="muted">(fixa na área de trabalho)</small></span>
-      <button class="switch" id="swWidget" role="switch"></button>
     </div>
 
     <div class="panel-foot">

@@ -23,6 +23,11 @@ windows = { version = "0.58", features = [
   "Media_Control",
   "Storage_Streams",
 ] }
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_UI_WindowsAndMessaging",
+] }
 
 [profile.release]
 codegen-units = 1

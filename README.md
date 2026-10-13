@@ -26,11 +26,14 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Fundo dinâmico** feito com a capa da música. A cor de destaque do app também muda conforme a capa.
 - **Busca com capas** (Deezer API): o resultado abre direto no Spotify, YouTube Music, SoundCloud, Apple Music ou Deezer.
 - **Controles**: tocar/pausar, próxima, anterior e barra de progresso clicável.
-- **Fundo personalizado**: imagem, vídeo (mp4/webm) ou transparente.
-- **Modo widget**: fixa o player na área de trabalho, atrás das janelas.
+- **Wallpaper animado atrás dos ícones**, no estilo Wallpaper Engine. Mostra o relógio, a letra e a música tocando direto na área de trabalho.
+- **Biblioteca de wallpapers**: vídeo (mp4/webm), GIF ou imagem, mais o **Aurora**, um fundo animado embutido que muda de cor conforme a capa.
+- **Pausa sozinho com jogo em tela cheia**, pra não roubar FPS. Também pode pausar com janela maximizada.
 - Fica na **bandeja do sistema** quando você fecha.
 
 <img src="docs/search.jpg" alt="Busca com resultados e artistas" />
+
+<img src="docs/wallpaper.jpg" alt="Modo wallpaper: relógio, letra e música tocando na área de trabalho" />
 
 ## ⌨️ Atalhos
 
@@ -64,10 +67,14 @@ Pra mexer só no visual, sem compilar nada, use `npm run demo`. Ele abre o front
 │ HTML + CSS + JS puro                     │      │ media.rs → GlobalSystemMediaTransportControls │
 │ relógio · carrossel 3D · letra · busca   │◀────▶│   lê título/artista/capa/posição a cada 400ms │
 │                                          │ IPC  │   e manda play/pause/próxima pro app de música│
-│                                          │      │ net.rs   → LRCLIB (letras) e Deezer (busca)   │
-└──────────────────────────────────────────┘      │ main.rs  → bandeja, modo widget, janela       │
+│ duas janelas: player e wallpaper         │      │ net.rs   → LRCLIB (letras) e Deezer (busca)   │
+└──────────────────────────────────────────┘      │ wallpaper.rs → janela atrás dos ícones        │
+                                                  │   (WorkerW) + detecta jogo em tela cheia      │
+                                                  │ main.rs  → bandeja e comandos                 │
                                                   └───────────────────────────────────────────────┘
 ```
+
+O modo wallpaper usa o mesmo truque do Wallpaper Engine e do Lively: o Explorer cria uma camada chamada **WorkerW** entre o papel de parede e os ícones, e o app pendura uma segunda janela nela. A cada 1,2 s o Rust confere se o app em foco está em tela cheia, e o wallpaper congela enquanto estiver.
 
 A posição da música é medida pelo app de origem e interpolada no front a cada frame. Cada verso da letra (LRC) é quebrado em pedaços de 1–3 palavras, e o tempo do verso é distribuído entre eles pelo tamanho de cada pedaço.
 
@@ -76,6 +83,8 @@ A posição da música é medida pelo app de origem e interpolada no front a cad
 - [ ] Suporte a macOS
 - [ ] Tocar direto pelo app (Spotify Web API / MusicKit)
 - [ ] Iniciar junto com o Windows
+- [ ] Wallpaper em vários monitores
+- [ ] Wallpapers que reagem ao som (visualizador)
 - [ ] Temas e posição dos elementos personalizáveis
 
 ## 📄 Licença

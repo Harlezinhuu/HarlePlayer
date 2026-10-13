@@ -79,7 +79,7 @@ body.bg-transparent .bg-shade { background: linear-gradient(90deg, rgba(4, 8, 20
 }
 .win-btn:hover { background: rgba(255, 255, 255, 0.18); }
 .win-btn svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 1.5; fill: none; stroke-linecap: round; }
-body.widget #titlebar { display: none; }
+
 
 /* ---------- relógio ---------- */
 #clock {
@@ -333,3 +333,90 @@ body.playing .ico-play { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ===================================================================
+   Wallpapers
+   =================================================================== */
+#bgCanvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  filter: blur(24px) saturate(1.25); transform: scale(1.12);
+}
+
+/* biblioteca nas configurações */
+.lib { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.lib-tile {
+  position: relative; aspect-ratio: 16 / 10; border-radius: 11px; overflow: hidden;
+  border: 1px solid var(--stroke); padding: 0;
+  background: #0b1020 center / cover no-repeat;
+  display: flex; align-items: flex-end; text-align: left;
+  transition: transform .2s var(--ease), border-color .2s;
+}
+.lib-tile:hover { transform: translateY(-2px); }
+.lib-tile.sel { border: 2px solid rgb(var(--accent)); box-shadow: 0 0 18px rgba(var(--accent), .45); }
+.lib-tile span {
+  width: 100%; padding: 14px 7px 5px; font-size: 10.5px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .7));
+}
+.lib-badge {
+  position: absolute; top: 5px; left: 5px; font-style: normal; font-size: 8px;
+  padding: 2px 5px; border-radius: 6px; background: rgba(0, 0, 0, .55);
+}
+.lib-del {
+  position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; font-style: normal; font-size: 14px; line-height: 1;
+  background: rgba(0, 0, 0, .6); opacity: 0; transition: opacity .2s;
+}
+.lib-tile:hover .lib-del { opacity: 1; }
+.lib-del:hover { background: #e5484d; }
+.lib-add {
+  border-style: dashed; background: rgba(255, 255, 255, .04);
+  flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.lib-add b { font-size: 22px; font-weight: 300; line-height: 1; }
+.lib-add span { background: none; padding: 0; text-align: center; color: var(--muted); }
+.builtin-aurora {
+  background:
+    radial-gradient(60% 80% at 25% 30%, rgba(80, 140, 255, .9), transparent 70%),
+    radial-gradient(50% 70% at 75% 60%, rgba(170, 90, 255, .85), transparent 70%),
+    radial-gradient(40% 60% at 50% 100%, rgba(40, 210, 220, .7), transparent 70%),
+    #04060d;
+}
+.builtin-cover {
+  background:
+    linear-gradient(135deg, rgba(var(--accent), .9), rgba(10, 14, 30, .95)),
+    #0b1020;
+}
+.hint { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
+
+/* ===================================================================
+   Modo wallpaper (janela atrás dos ícones)
+   =================================================================== */
+#nowCard { display: none; }
+body.mode-wallpaper #titlebar,
+body.mode-wallpaper #queue,
+body.mode-wallpaper #stage,
+body.mode-wallpaper #dock,
+body.mode-wallpaper #settings,
+body.mode-wallpaper #serviceMenu,
+body.mode-wallpaper #toast { display: none !important; }
+
+body.mode-wallpaper #clock { left: auto; right: 5vw; top: 7vh; text-align: right; }
+body.mode-wallpaper #time { transform-origin: top right; }
+body.mode-wallpaper #lyrics { left: 8vw; right: 8vw; top: 38vh; height: 26vh; }
+body.mode-wallpaper #lyricChunk { font-size: clamp(44px, 10vh, 120px); max-width: 16ch; }
+
+body.mode-wallpaper.has-media #nowCard {
+  display: flex; align-items: center; gap: 14px;
+  position: fixed; z-index: 3; right: 5vw; bottom: 10vh;
+  width: clamp(280px, 22vw, 380px); padding: 12px 16px 12px 12px; border-radius: 18px;
+}
+#ncCover { width: 58px; height: 58px; border-radius: 11px; object-fit: cover; flex: none; background: rgba(255,255,255,.1); }
+.nc-text { flex: 1; min-width: 0; }
+#ncTitle { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ncArtist { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nc-bar { position: relative; height: 3px; margin-top: 9px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
+#ncFill { position: absolute; inset: 0 auto 0 0; width: 0; background: rgb(var(--accent)); }
+
+/* jogo em tela cheia → congela tudo */
+body.paused *, body.paused *::before, body.paused *::after { animation-play-state: paused !important; }

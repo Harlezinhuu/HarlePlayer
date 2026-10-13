@@ -3,15 +3,16 @@
 
 mod media;
 mod net;
+mod wallpaper;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, Wry};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, Wry};
 
-/// Guarda o item "Modo widget" da bandeja pra manter ele sincronizado
+/// Guarda o item "Wallpaper animado" da bandeja pra manter ele sincronizado
 /// quando o modo é trocado pelas configurações do app.
 struct TrayState {
-    widget_item: CheckMenuItem<Wry>,
+    wallpaper_item: CheckMenuItem<Wry>,
 }
 
 // ---------- comandos chamados pelo front ----------
@@ -40,19 +41,21 @@ fn open_url(url: String) -> Result<(), String> {
     net::open_url(&url)
 }
 
+/// Liga/desliga o wallpaper animado atrás dos ícones.
+/// (async: no Windows, criar janela dentro de comando síncrono trava.)
 #[tauri::command]
-fn set_widget_mode(app: AppHandle, enabled: bool) -> Result<(), String> {
-    apply_widget_mode(&app, enabled)?;
+async fn set_wallpaper_mode(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let result = wallpaper::set(&app, enabled);
+    let on = result.is_ok() && enabled;
     if let Some(tray) = app.try_state::<TrayState>() {
-        let _ = tray.widget_item.set_checked(enabled);
+        let _ = tray.wallpaper_item.set_checked(on);
     }
-    Ok(())
+    result
 }
 
 #[tauri::command]
 fn hide_to_tray(app: AppHandle) -> Result<(), String> {
-    let w = main_window(&app)?;
-    w.hide().map_err(|e| e.to_string())
+    main_window(&app)?.hide().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -75,45 +78,39 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// Modo widget: a janela ocupa a tela, fica atrás de todas as outras
-/// (por cima do papel de parede) e some da barra de tarefas.
-fn apply_widget_mode(app: &AppHandle, enabled: bool) -> Result<(), String> {
-    let w = main_window(app)?;
-    let r = |res: tauri::Result<()>| res.map_err(|e| e.to_string());
-    if enabled {
-        r(w.set_always_on_top(false))?;
-        r(w.set_always_on_bottom(true))?;
-        r(w.set_skip_taskbar(true))?;
-        r(w.maximize())?;
-        r(w.show())?;
-    } else {
-        r(w.set_always_on_bottom(false))?;
-        r(w.set_skip_taskbar(false))?;
-        r(w.unmaximize())?;
-        r(w.show())?;
-        let _ = w.set_focus();
-    }
-    Ok(())
+/// Controles de mídia pela bandeja (fora da thread principal, porque a API
+/// de mídia do Windows bloqueia enquanto espera a resposta do app).
+fn tray_media(action: &'static str) {
+    std::thread::spawn(move || {
+        let _ = media::control(action, None);
+    });
 }
 
 // ---------- bandeja ----------
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Mostrar Harle Player", true, None::<&str>)?;
-    let widget = CheckMenuItem::with_id(
+    let show = MenuItem::with_id(app, "show", "Abrir Harle Player", true, None::<&str>)?;
+    let wall = CheckMenuItem::with_id(
         app,
-        "widget",
-        "Modo widget (fixar na área de trabalho)",
+        "wallpaper",
+        "Wallpaper animado na área de trabalho",
         true,
         false,
         None::<&str>,
     )?;
-    let sep = PredefinedMenuItem::separator(app)?;
+    let sep1 = PredefinedMenuItem::separator(app)?;
+    let play = MenuItem::with_id(app, "playpause", "Tocar / pausar", true, None::<&str>)?;
+    let next = MenuItem::with_id(app, "next", "Próxima", true, None::<&str>)?;
+    let prev = MenuItem::with_id(app, "prev", "Anterior", true, None::<&str>)?;
+    let sep2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &widget, &sep, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[&show, &wall, &sep1, &play, &next, &prev, &sep2, &quit],
+    )?;
 
     app.manage(TrayState {
-        widget_item: widget.clone(),
+        wallpaper_item: wall.clone(),
     });
 
     let mut builder = TrayIconBuilder::with_id("main-tray")
@@ -122,11 +119,20 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "show" => show_main(app),
-            "widget" => {
-                let on = widget.is_checked().unwrap_or(false);
-                let _ = apply_widget_mode(app, on);
-                let _ = app.emit("widget-mode", on);
+            "wallpaper" => {
+                let on = wall.is_checked().unwrap_or(false);
+                let handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let ok = wallpaper::set(&handle, on).is_ok();
+                    if let Some(tray) = handle.try_state::<TrayState>() {
+                        let _ = tray.wallpaper_item.set_checked(ok && on);
+                    }
+                    let _ = handle.emit("wallpaper-mode", ok && on);
+                });
             }
+            "playpause" => tray_media("toggle"),
+            "next" => tray_media("next"),
+            "prev" => tray_media("prev"),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -149,10 +155,11 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 fn main() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .setup(|app| {
             build_tray(app)?;
             media::start_watcher(app.handle().clone());
+            wallpaper::start_watcher(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -160,10 +167,17 @@ fn main() {
             media_control,
             http_get,
             open_url,
-            set_widget_mode,
+            set_wallpaper_mode,
             hide_to_tray,
             quit_app
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("erro ao iniciar o Harle Player");
+
+    app.run(|_app, event| {
+        // Ao sair, devolve o papel de parede normal do Windows.
+        if let RunEvent::Exit = event {
+            wallpaper::refresh_wallpaper();
+        }
+    });
 }
