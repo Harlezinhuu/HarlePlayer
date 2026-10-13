@@ -46,7 +46,7 @@ export function createDemoApi() {
   const listeners = {};
   let idx = 0;
   let state = {
-    available: true, ...TRACKS[0], source: "Spotify.exe", playing: true,
+    available: true, ...TRACKS[0], source: "Chrome", service: "soundcloud", playing: true,
     positionMs: 13000, updatedAtMs: Date.now(),
   };
   const emit = () => (listeners["media-update"] || []).forEach((cb) => cb({ ...state }));
@@ -93,6 +93,9 @@ export function createDemoApi() {
           }
           return "null";
         }
+        case "discord_set":
+          console.log("[demo] discord", JSON.stringify(args.presence));
+          return;
         case "open_url":
           console.log("[demo] abrir", args.url);
           return;

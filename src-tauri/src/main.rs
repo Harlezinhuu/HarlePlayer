@@ -1,6 +1,8 @@
 // Esconde o console no Windows em release.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod detect;
+mod discord;
 mod media;
 mod net;
 mod wallpaper;
@@ -51,6 +53,22 @@ async fn set_wallpaper_mode(app: AppHandle, enabled: bool) -> Result<(), String>
         let _ = tray.wallpaper_item.set_checked(on);
     }
     result
+}
+
+/// Atualiza o "Ouvindo …" no perfil do Discord.
+#[tauri::command]
+fn discord_set(presence: discord::Presence) {
+    discord::set(presence);
+}
+
+#[tauri::command]
+fn discord_clear() {
+    discord::clear();
+}
+
+#[tauri::command]
+fn discord_status() -> discord::Status {
+    discord::current_status()
 }
 
 #[tauri::command]
@@ -160,6 +178,7 @@ fn main() {
             build_tray(app)?;
             media::start_watcher(app.handle().clone());
             wallpaper::start_watcher(app.handle().clone());
+            discord::start();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -168,6 +187,9 @@ fn main() {
             http_get,
             open_url,
             set_wallpaper_mode,
+            discord_set,
+            discord_clear,
+            discord_status,
             hide_to_tray,
             quit_app
         ])

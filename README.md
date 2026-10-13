@@ -28,6 +28,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Controles**: tocar/pausar, próxima, anterior e barra de progresso clicável.
 - **Wallpaper animado atrás dos ícones**, no estilo Wallpaper Engine. Mostra o relógio, a letra e a música tocando direto na área de trabalho.
 - **Biblioteca de wallpapers**: vídeo (mp4/webm), GIF ou imagem, mais o **Aurora**, um fundo animado embutido que muda de cor conforme a capa.
+- **Discord Rich Presence**: mostra "Ouvindo SoundCloud" (ou YouTube Music, YouTube…) no seu perfil, com capa, artista, barra de tempo e botão "Ouvir no …". Detecta sozinho onde a música está tocando, até no navegador.
 - **Pausa sozinho com jogo em tela cheia**, pra não roubar FPS. Também pode pausar com janela maximizada.
 - Fica na **bandeja do sistema** quando você fecha.
 
@@ -47,6 +48,21 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 ## 📥 Baixar
 
 Vá em [**Releases**](https://github.com/Harlezinhuu/HarlePlayer/releases) e baixe o `Harle Player_x.x.x_x64-setup.exe`.
+
+## 🎮 Configurando o Discord
+
+O Discord mostra o **nome do app** no perfil. Por isso dá pra ter um app pra cada serviço, e o perfil fica "Ouvindo **SoundCloud**", "Ouvindo **YouTube Music**" e assim por diante.
+
+1. Entre em [discord.com/developers/applications](https://discord.com/developers/applications) → **New Application** → dê o nome que deve aparecer (ex.: `SoundCloud`).
+2. Copie o **Application ID** e cole no serviço certo em [`src-tauri/discord-apps.json`](src-tauri/discord-apps.json). Se quiser um app só pra tudo, use o `default`.
+3. (Opcional) Em **Rich Presence → Art Assets**, suba:
+   - `logo`: imagem usada quando a música não tem capa;
+   - um ícone com o nome do serviço (`soundcloud`, `ytmusic`, `youtube`…), que aparece pequeno no canto da capa.
+4. Compile de novo. Os IDs vão embutidos no app, então quem baixar a Release já recebe tudo pronto.
+
+A capa vem do Deezer (o Discord só aceita imagem por link). Se a música não existir lá, aparece o `logo`.
+
+**Como ele sabe onde está tocando:** apps de desktop (Spotify, YouTube Music Desktop, Apple Music…) se identificam sozinhos. No navegador, ele procura o nome do site nos títulos das janelas abertas. Se não achar, usa a opção *"Música tocando no navegador conta como"* das configurações.
 
 ## 🛠️ Rodando o código
 

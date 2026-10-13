@@ -21,6 +21,8 @@ pub struct MediaState {
     pub updated_at_ms: i64,
     /// Capa como data URL (base64).
     pub thumb: Option<String>,
+    /// Serviço detectado: soundcloud, ytmusic, youtube, spotify, apple, deezer, browser, other
+    pub service: String,
 }
 
 pub fn start_watcher(app: tauri::AppHandle) {
@@ -137,6 +139,7 @@ mod imp {
             duration_ms: (end - start).max(0),
             updated_at_ms,
             thumb: None,
+            service: String::new(),
         })
     }
 
@@ -168,6 +171,8 @@ mod imp {
             let mut thumb: Option<String> = None;
             let mut thumb_tries = 0u32;
             let mut fails = 0u32;
+            let mut service = String::new();
+            let mut service_checks = 0u32;
 
             loop {
                 if mgr.is_none() {
@@ -185,7 +190,15 @@ mod imp {
                                     last_key = key;
                                     thumb = None;
                                     thumb_tries = 0;
+                                    service_checks = 0;
                                 }
+                                // Detecta o serviço na troca de música e confere de novo
+                                // algumas vezes (o título da aba pode demorar a atualizar).
+                                if service_checks < 6 && (service_checks == 0 || service == "browser" || service_checks % 3 == 0) {
+                                    service = crate::detect::service_for(&st.source, &st.title);
+                                }
+                                service_checks = service_checks.saturating_add(1);
+                                st.service = service.clone();
                                 // Alguns apps trocam o título antes da capa: lê de novo
                                 // uma vez logo depois pra não ficar com a capa antiga.
                                 if thumb_tries < 8 {

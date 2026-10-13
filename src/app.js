@@ -49,24 +49,33 @@ const DEFAULTS = {
   wallpaperId: "builtin:aurora",
   pauseFullscreen: true,
   pauseMaximized: false,
+  discord: true, // Rich Presence
+  discordSpotify: false, // o Spotify já mostra sozinho no Discord
+  browserService: "soundcloud", // quando não dá pra saber qual site do navegador está tocando
 };
 const settings = { ...DEFAULTS, ...store.get("hp.settings", {}) };
 delete settings.widget; // opção antiga
 const saveSettings = () => store.set("hp.settings", settings);
 
+// url: abre no app/site · web: link https (usado no botão do Discord)
+const enc = encodeURIComponent;
 const SERVICES = {
-  spotify: { name: "Spotify", color: "#1ed760", url: (q) => `spotify:search:${encodeURIComponent(q)}` },
-  ytmusic: { name: "YouTube Music", color: "#ff3b3b", url: (q) => `https://music.youtube.com/search?q=${encodeURIComponent(q)}` },
-  soundcloud: { name: "SoundCloud", color: "#ff7a1a", url: (q) => `https://soundcloud.com/search?q=${encodeURIComponent(q)}` },
-  apple: { name: "Apple Music", color: "#fa3d5a", url: (q) => `https://music.apple.com/br/search?term=${encodeURIComponent(q)}` },
-  deezer: { name: "Deezer", color: "#a238ff", url: (q) => `https://www.deezer.com/search/${encodeURIComponent(q)}` },
+  spotify: { name: "Spotify", color: "#1ed760", url: (q) => `spotify:search:${enc(q)}`, web: (q) => `https://open.spotify.com/search/${enc(q)}` },
+  soundcloud: { name: "SoundCloud", color: "#ff7a1a", url: (q) => `https://soundcloud.com/search?q=${enc(q)}` },
+  ytmusic: { name: "YouTube Music", color: "#ff3b3b", url: (q) => `https://music.youtube.com/search?q=${enc(q)}` },
+  youtube: { name: "YouTube", color: "#ff0033", url: (q) => `https://www.youtube.com/results?search_query=${enc(q)}` },
+  apple: { name: "Apple Music", color: "#fa3d5a", url: (q) => `https://music.apple.com/br/search?term=${enc(q)}` },
+  deezer: { name: "Deezer", color: "#a238ff", url: (q) => `https://www.deezer.com/search/${enc(q)}` },
 };
+const serviceWeb = (id, q) => (SERVICES[id]?.web || SERVICES[id]?.url)?.(q);
+const SOURCE_NAMES = { tidal: "TIDAL", other: "Outro app", browser: "Navegador" };
+const serviceName = (id) => SERVICES[id]?.name || SOURCE_NAMES[id] || "";
 if (!SERVICES[settings.service]) settings.service = "spotify";
 
 // ===================================================================
 // Estado
 // ===================================================================
-let media = { available: false, title: "", artist: "", album: "", source: "", playing: false, positionMs: 0, durationMs: 0, updatedAtMs: Date.now(), thumb: null };
+let media = { available: false, title: "", artist: "", album: "", source: "", playing: false, positionMs: 0, durationMs: 0, updatedAtMs: Date.now(), thumb: null, service: "" };
 let history = store.get("hp.history", []);
 let lastThumb = null;
 let focusOffset = 0;
@@ -615,7 +624,11 @@ function renderMini() {
   const curKey = keyOf(media);
   const h = curKey ? history.find((x) => x.key === curKey) : null;
   $("#miniTitle").textContent = curKey ? media.title : "Nada tocando";
-  $("#miniArtist").textContent = curKey ? media.artist || media.album || "" : "Abra o Spotify, YouTube Music…";
+  const svc = curKey ? playingService() : "";
+  const via = svc && svc !== "other" ? serviceName(svc) : "";
+  $("#miniArtist").textContent = curKey
+    ? [media.artist || media.album, via].filter(Boolean).join(" · ")
+    : "Abra o SoundCloud, YouTube Music, Spotify…";
   const cover = curKey ? media.thumb || h?.thumb || "" : "";
   const mc = $("#miniCover");
   if (cover) mc.src = cover;
@@ -926,6 +939,11 @@ function renderSettings() {
   $("#offVal").textContent = `${settings.lyricsOffset > 0 ? "+" : ""}${settings.lyricsOffset.toFixed(1).replace(".", ",")} s`;
   $("#btnLyrics").classList.toggle("on", settings.lyrics);
   document.body.classList.toggle("no-lyrics", !settings.lyrics);
+  $("#swDiscord").classList.toggle("on", settings.discord);
+  $("#swDiscordSpotify").classList.toggle("on", settings.discordSpotify);
+  $("#segBrowser").innerHTML = ["soundcloud", "ytmusic", "youtube"]
+    .map((id) => `<button data-v="${id}" class="${id === settings.browserService ? "sel" : ""}">${esc(SERVICES[id].name)}</button>`)
+    .join("");
   renderLibrary();
 }
 
@@ -948,6 +966,11 @@ function renderLibrary() {
 $("#btnSettings").addEventListener("click", () => {
   $("#settings").hidden = !$("#settings").hidden;
   $("#btnSettings").classList.toggle("on", !$("#settings").hidden);
+  clearInterval(discordStatusTimer);
+  if (!$("#settings").hidden) {
+    refreshDiscordStatus();
+    discordStatusTimer = setInterval(refreshDiscordStatus, 3000);
+  }
 });
 $("#btnCloseSettings").addEventListener("click", () => {
   $("#settings").hidden = true;
@@ -1036,6 +1059,28 @@ $("#swPauseMax").addEventListener("click", () => {
   saveSettings();
   renderSettings();
 });
+const discordChanged = () => {
+  saveSettings();
+  renderSettings();
+  renderMini();
+  discordSig = "";
+  scheduleDiscord();
+  setTimeout(refreshDiscordStatus, 2500);
+};
+$("#swDiscord").addEventListener("click", () => {
+  settings.discord = !settings.discord;
+  discordChanged();
+});
+$("#swDiscordSpotify").addEventListener("click", () => {
+  settings.discordSpotify = !settings.discordSpotify;
+  discordChanged();
+});
+$("#segBrowser").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-v]");
+  if (!b) return;
+  settings.browserService = b.dataset.v;
+  discordChanged();
+});
 $("#lnkGithub").addEventListener("click", (e) => {
   e.preventDefault();
   api.invoke("open_url", { url: "https://github.com/Harlezinhuu" }).catch(() => {});
@@ -1103,6 +1148,86 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ===================================================================
+// Discord Rich Presence
+// ===================================================================
+function playingService() {
+  const s = media.service || "";
+  return s === "browser" || s === "" ? settings.browserService : s;
+}
+
+// O Discord só aceita capa por link https; a capa do Windows vem em base64.
+// Então procura a mesma música no Deezer e usa a capa de lá.
+const coverCache = new Map();
+async function coverUrlFor(title, artist) {
+  const k = `${title}|${artist}`;
+  if (coverCache.has(k)) return coverCache.get(k);
+  const strict = artist ? `artist:"${artist}" track:"${title}"` : title;
+  let r = await httpJson(`https://api.deezer.com/search?q=${enc(strict)}&limit=1`);
+  if (!r?.data?.length) r = await httpJson(`https://api.deezer.com/search?q=${enc(`${artist} ${title}`.trim())}&limit=1`);
+  const url = r?.data?.[0]?.album?.cover_big || null;
+  coverCache.set(k, url);
+  return url;
+}
+
+let discordTimer;
+let discordSig = "";
+function scheduleDiscord() {
+  if (IS_WALLPAPER) return; // só o player fala com o Discord
+  clearTimeout(discordTimer);
+  discordTimer = setTimeout(updateDiscord, 1200);
+}
+
+async function updateDiscord() {
+  const svc = playingService();
+  const show = settings.discord && keyOf(media) && media.playing && !(svc === "spotify" && !settings.discordSpotify);
+  if (!show) {
+    if (discordSig !== "off") {
+      discordSig = "off";
+      api.invoke("discord_clear").catch(() => {});
+    }
+    return;
+  }
+  const start = Date.now() - positionNow();
+  const sig = `${keyOf(media)}|${svc}|${Math.round(start / 3000)}`;
+  if (sig === discordSig) return;
+  discordSig = sig;
+
+  const title = cleanTitle(media.title) || media.title;
+  const artist = cleanArtist(media.artist || "");
+  const cover = await coverUrlFor(title, artist);
+  if (sig !== discordSig) return; // mudou enquanto buscava a capa
+
+  api
+    .invoke("discord_set", {
+      presence: {
+        service: svc,
+        serviceName: svc === "other" ? "Harle Player" : serviceName(svc),
+        title: media.title,
+        artist: media.artist || "",
+        album: media.album || "",
+        cover,
+        startMs: Math.round(start),
+        endMs: media.durationMs > 0 ? Math.round(start + media.durationMs) : null,
+        url: serviceWeb(svc, `${title} ${artist}`.trim()) || null,
+      },
+    })
+    .catch(() => {});
+}
+
+let discordStatusTimer;
+async function refreshDiscordStatus() {
+  const el = $("#discordStatus");
+  try {
+    const st = await api.invoke("discord_status");
+    if (!st) el.textContent = "Modo demo";
+    else if (!settings.discord) el.textContent = "Desligado";
+    else el.textContent = `${st.connected ? "🟢" : "⚪"} ${st.message}`;
+  } catch {
+    el.textContent = "";
+  }
+}
+
+// ===================================================================
 // Mídia
 // ===================================================================
 function render() {
@@ -1129,6 +1254,7 @@ function onMedia(s) {
     updateArt(null);
   }
   render();
+  scheduleDiscord();
 }
 
 // ===================================================================
