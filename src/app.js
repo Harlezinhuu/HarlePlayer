@@ -1114,9 +1114,10 @@ const coverCache = new Map();
 async function coverUrlFor(title, artist) {
   const k = `${title}|${artist}`;
   if (coverCache.has(k)) return coverCache.get(k);
-  const strict = artist ? `artist:"${artist}" track:"${title}"` : title;
-  let r = await httpJson(`https://api.deezer.com/search?q=${enc(strict)}&limit=1`);
-  if (!r?.data?.length) r = await httpJson(`https://api.deezer.com/search?q=${enc(`${artist} ${title}`.trim())}&limit=1`);
+  // (a busca avançada `artist:"…" track:"…"` do Deezer voltou 0 resultados no teste real,
+  //  então usa a busca simples, que acha a capa certa)
+  let r = await httpJson(`https://api.deezer.com/search?q=${enc(`${artist} ${title}`.trim())}&limit=1`);
+  if (!r?.data?.length && artist) r = await httpJson(`https://api.deezer.com/search?q=${enc(title)}&limit=1`);
   const url = r?.data?.[0]?.album?.cover_big || null;
   coverCache.set(k, url);
   return url;
