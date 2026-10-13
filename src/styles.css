@@ -141,6 +141,76 @@ body.clock-outline #time {
   font-size: 13px; font-weight: 700; padding: 2px 6px 6px;
 }
 .chev { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; opacity: 0.7; }
+/* abas Fila · Recentes · Playlists */
+.q-tabs { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); margin-bottom: 4px; flex: none; }
+.q-tabs button {
+  flex: 1; height: 28px; border: 0; border-radius: 9px; background: transparent;
+  font-size: 11.5px; font-weight: 700; color: var(--muted); transition: background .2s, color .2s;
+}
+.q-tabs button:hover { color: var(--text); }
+.q-tabs button.sel { background: rgba(255, 255, 255, 0.14); color: var(--text); box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+.q-tools { display: flex; align-items: center; gap: 4px; flex: none; }
+.q-tools:empty { display: none; }
+.q-spacer { flex: 1; }
+.q-tool {
+  position: relative; height: 30px; min-width: 30px; padding: 0 7px; border: 0; border-radius: 9px;
+  background: transparent; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  color: var(--muted); font-size: 11.5px; font-weight: 700; transition: background .2s, color .2s;
+}
+.q-tool:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.q-tool.on { color: rgb(var(--accent)); }
+.q-tool.on::after { content: ""; position: absolute; bottom: 2px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
+.q-tool i { position: absolute; top: 3px; right: 3px; font-style: normal; font-size: 8.5px; font-weight: 800; }
+.q-tool.wide { flex: 1; background: rgba(255, 255, 255, 0.07); color: var(--text); height: 34px; }
+.q-tool.play { background: rgb(var(--accent)); color: #0b1020; }
+.q-tool.danger { color: #ff7a7a; background: rgba(255, 90, 90, 0.15); }
+.q-tool svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.q-tool svg.fill, .tile-more svg.fill, .ctx svg.fill { fill: currentColor; stroke: none; }
+.pl-name {
+  flex: 1; min-width: 0; height: 30px; padding: 0 8px; border-radius: 9px; border: 1px solid transparent;
+  background: transparent; color: var(--text); font: inherit; font-size: 13px; font-weight: 700; outline: 0; user-select: text;
+}
+.pl-name:hover, .pl-name:focus { background: rgba(255, 255, 255, 0.08); }
+.pl-name:focus { border-color: rgba(var(--accent), 0.6); }
+#historyList .q-label { cursor: default; padding: 10px 7px 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+#historyList .q-label:hover, #historyList .q-empty:hover { background: transparent; }
+#historyList .q-empty { cursor: default; display: block; padding: 18px 10px; font-size: 12px; line-height: 1.5; color: var(--muted); text-align: center; }
+#historyList .q-empty b { color: var(--text); }
+.q-rm {
+  width: 26px; height: 26px; border: 0; border-radius: 8px; background: transparent; flex: none;
+  display: grid; place-items: center; color: var(--muted); opacity: 0; transition: opacity .15s, background .15s;
+}
+.q-rm svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+#historyList li:hover .q-rm { opacity: 1; }
+.q-rm:hover { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+#historyList li.sortable { touch-action: none; }
+#historyList li.dragging { opacity: .45; }
+#historyList li.drop-before { box-shadow: inset 0 2px 0 rgb(var(--accent)); }
+#historyList li.drop-after { box-shadow: inset 0 -2px 0 rgb(var(--accent)); }
+.q-cover.mosaic { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+.q-cover.mosaic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.q-cover.pl-blank { display: grid; place-items: center; background: linear-gradient(135deg, rgba(var(--accent), .7), rgba(var(--accent), .25)); }
+.q-cover.pl-blank svg { width: 16px; height: 16px; fill: #fff; }
+
+/* ⋯ nos resultados */
+.res-tile { position: relative; }
+.tile-more {
+  position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border: 0; border-radius: 50%;
+  display: grid; place-items: center; background: rgba(10, 12, 20, 0.6); color: #fff;
+  backdrop-filter: blur(8px); opacity: 0; transition: opacity .15s, background .15s;
+}
+.tile-more svg { width: 16px; height: 16px; }
+.res-tile:hover .tile-more { opacity: 1; }
+.tile-more:hover { background: rgba(var(--accent), 0.9); }
+
+/* menu ⋯ */
+.ctx { background: rgba(16, 18, 30, 0.94); backdrop-filter: blur(24px) saturate(1.4); z-index: 30; max-height: 70vh; overflow-y: auto; min-width: 210px; }
+.ctx button { gap: 10px; }
+.ctx button svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; flex: none; opacity: .8; }
+.ctx hr { border: 0; height: 1px; background: rgba(255, 255, 255, 0.1); margin: 5px 4px; }
+.ctx-label { padding: 6px 10px 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ctx .muted-btn { color: var(--muted); }
+
 .now-item, #historyList li {
   display: flex; align-items: center; gap: 10px; padding: 7px; border-radius: 13px;
   cursor: pointer; transition: background 0.2s;

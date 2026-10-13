@@ -27,7 +27,9 @@ export function youtubeId(url) {
   }
 }
 
-export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
+import * as Q from "./queue.js";
+
+export function createPlayer({ api, onState, onQueue = () => {}, resolve = null, toast, ytHostId = "ytHost" }) {
   const audio = new Audio();
   audio.preload = "auto";
 
@@ -39,6 +41,17 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
   let seq = 0;
   let objectUrl = null;
   let volume = 1;
+  let repeat = "off"; // "off" | "all" | "one"
+  const q = () => ({ tracks: queue, index });
+  const setQ = (n) => {
+    queue = n.tracks;
+    index = n.index;
+    if (index >= 0) cur = queue[index];
+    onQueue(queueInfo());
+  };
+  function queueInfo() {
+    return { tracks: queue, index, repeat };
+  }
 
   // ---------- estado ----------
   let yt = null;
@@ -73,7 +86,7 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
       thumb: cur?.cover || null,
       coverUrl: cur?.cover || null,
       link: cur?.url || null,
-      hasNext: index + 1 < queue.length,
+      hasNext: Q.nextIndex(q(), repeat) >= 0,
     };
   }
   const emit = () => {
@@ -182,13 +195,22 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
   async function playIndex(i) {
     if (i < 0 || i >= queue.length) return;
     const my = ++seq;
-    index = i;
-    cur = queue[i];
+    if (i !== index) setQ(Q.markPlayed({ tracks: queue, index: i }, i));
+    else setQ(q());
     loading = true;
     stopEngines();
     engine = null;
     emit();
     try {
+      // música salva só com nome (ex.: veio do Deezer/Spotify): acha o link agora
+      if (!cur.url && resolve) {
+        const found = await resolve(cur);
+        if (my !== seq) return;
+        if (!found?.url) throw new Error(`Não achei "${cur.title}"`);
+        queue[index] = { ...cur, ...found, qid: cur.qid, user: cur.user };
+        cur = queue[index];
+        onQueue(queueInfo());
+      }
       if (cur.service === "soundcloud") await playDownloaded("soundcloud_audio", cur, my);
       else if (cur.service === "ytmusic" || cur.service === "youtube") {
         try {
@@ -204,13 +226,15 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
       if (my !== seq) return;
       loading = false;
       toast(String(e?.message || e), 4000);
-      if (index + 1 < queue.length) return next(true);
+      if (index + 1 < queue.length) return playIndex(index + 1);
     }
     if (my === seq) emit();
   }
 
   function next(auto = false) {
-    if (index + 1 < queue.length) return playIndex(index + 1);
+    const n = Q.nextIndex(q(), repeat, auto);
+    if (n === index && auto) return seek(0), toggleOn();
+    if (n >= 0) return playIndex(n);
     if (auto) {
       loading = false;
       emit();
@@ -221,6 +245,11 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
     const pos = state().positionMs;
     if (pos > 3000 || index <= 0) return seek(0);
     return playIndex(index - 1);
+  }
+
+  function toggleOn() {
+    if (engine === "audio") audio.play().catch(() => {});
+    else if (engine === "yt" && yt) yt.playVideo();
   }
 
   function toggle() {
@@ -237,9 +266,45 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
   }
 
   function playQueue(tracks, start = 0) {
-    queue = tracks.slice();
+    queue = tracks.map((t) => Q.withQid(t));
+    index = -1;
     return playIndex(start);
   }
+
+  // ---------- fila estilo Spotify ----------
+  const queueApi = {
+    info: queueInfo,
+    jump: (i) => playIndex(i),
+    playNext(track) {
+      if (!cur) return playQueue([track], 0);
+      setQ(Q.insertNext(q(), track));
+      emit();
+    },
+    add(track) {
+      if (!cur) return playQueue([track], 0);
+      setQ(Q.enqueue(q(), track));
+      emit();
+    },
+    remove(i) {
+      setQ(Q.removeAt(q(), i));
+      emit();
+    },
+    move(from, to) {
+      setQ(Q.moveItem(q(), from, to));
+    },
+    shuffle() {
+      setQ(Q.shuffleUpcoming(q()));
+    },
+    clearUpcoming() {
+      setQ({ tracks: queue.slice(0, index + 1), index });
+      emit();
+    },
+    setRepeat(r) {
+      repeat = r;
+      onQueue(queueInfo());
+      emit();
+    },
+  };
 
   function stop() {
     seq++;
@@ -248,6 +313,7 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
     queue = [];
     index = -1;
     engine = null;
+    onQueue(queueInfo());
     loading = false;
     emit();
   }
@@ -281,5 +347,5 @@ export function createPlayer({ api, onState, toast, ytHostId = "ytHost" }) {
     try { yt?.setVolume?.(Math.round(volume * volume * 100)); } catch {}
   }
 
-  return { playQueue, setVolume, toggle, next: () => next(), prev, seek, stop, state, get active() { return !!cur; } };
+  return { playQueue, queue: queueApi, setVolume, toggle, next: () => next(), prev, seek, stop, state, get active() { return !!cur; } };
 }

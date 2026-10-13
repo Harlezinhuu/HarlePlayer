@@ -55,11 +55,13 @@
 
   <!-- ===== Continuar ouvindo ===== -->
   <aside id="queue" class="glass">
-    <div class="queue-head">
-      <span>Continuar ouvindo</span>
-      <svg viewBox="0 0 24 24" class="chev"><path d="M7 10l5 5 5-5" /></svg>
+    <div class="q-tabs" id="qTabs">
+      <button data-tab="fila">Fila</button>
+      <button data-tab="recentes">Recentes</button>
+      <button data-tab="playlists">Playlists</button>
     </div>
     <div id="nowItem" class="now-item"></div>
+    <div id="qTools" class="q-tools"></div>
     <ul id="historyList"></ul>
   </aside>
 
@@ -125,6 +127,9 @@
     <input id="volRange" type="range" min="0" max="100" step="1" value="100" aria-label="Volume" />
     <span id="volVal">100</span>
   </div>
+
+  <!-- ===== Menu ⋯ (fila / playlists) ===== -->
+  <div id="ctxMenu" class="glass popover ctx" hidden></div>
 
   <!-- ===== Menu de serviço ===== -->
   <div id="serviceMenu" class="glass popover" hidden></div>
