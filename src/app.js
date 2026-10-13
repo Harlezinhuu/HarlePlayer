@@ -46,6 +46,7 @@ const DEFAULTS = {
   bg: "dynamic", // dynamic | custom | transparent
   service: "soundcloud",
   lyrics: true,
+  lyricsMode: "line", // line = verso inteiro (karaokê) | chunks = pedaços grandes
   lyricsOffset: 0, // segundos (+ adianta a letra)
   clock24: true,
   clockStyle: "solid", // solid | thin | outline
@@ -718,10 +719,56 @@ async function loadLyrics(s) {
   }
 }
 
+// ---------- modo "verso inteiro": a frase toda, acendendo palavra por palavra ----------
+let shownLine = null;
+let shownLit = -1;
+function showLine(line, pos) {
+  const el = $("#lyricChunk");
+  if (line !== shownLine) {
+    shownLine = line;
+    shownLit = -1;
+    shownText = "";
+    clearTimeout(swapTimer);
+    el.classList.remove("in");
+    el.classList.add("out");
+    swapTimer = setTimeout(() => {
+      el.innerHTML = line ? line.chunks.map((c, i) => `<span data-i="${i}">${esc(c.text)}</span>`).join(" ") : "";
+      el.classList.remove("out");
+      void el.offsetWidth;
+      if (line) el.classList.add("in");
+      shownLit = -1;
+    }, 200);
+    return;
+  }
+  if (!line) return;
+  let lit = -1;
+  line.chunks.forEach((c, i) => {
+    if (c.t <= pos) lit = i;
+  });
+  if (lit === shownLit) return;
+  shownLit = lit;
+  el.querySelectorAll("span[data-i]").forEach((sp) => sp.classList.toggle("lit", +sp.dataset.i <= lit));
+}
+
+function currentLine(pos) {
+  if (!lyrics || lyrics.key !== keyOf(media)) return null;
+  const L = lyrics.lines;
+  let lo = 0, hi = L.length - 1, idx = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (L[mid].t <= pos) { idx = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  if (idx < 0) return null;
+  const line = L[idx];
+  if (pos > line.end + 300 || !line.chunks.length) return null;
+  return line;
+}
+
 let shownText = "";
 let swapTimer;
 function showChunk(text) {
   if (text === shownText) return;
+  shownLine = null;
   shownText = text;
   const el = $("#lyricChunk");
   clearTimeout(swapTimer);
@@ -772,7 +819,11 @@ requestAnimationFrame(frame);
     lastSec = sec;
     $("#tCur").textContent = fmt(pos);
   }
-  if (settings.lyrics) showChunk(currentChunk(pos + settings.lyricsOffset * 1000));
+  if (settings.lyrics) {
+    const p = pos + settings.lyricsOffset * 1000;
+    if (settings.lyricsMode === "chunks") showChunk(currentChunk(p));
+    else showLine(currentLine(p), p);
+  }
 }
 
 // ===================================================================
@@ -821,11 +872,16 @@ async function runSearch(q) {
   let res = null;
   let note = "";
   if (NATIVE_SEARCH[svc]) {
+    // Deezer já vai buscando junto: se o serviço falhar ou demorar, não espera de novo
+    const deezer = deezerSearch(q);
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("demorou demais (12 s)")), 12000));
     try {
-      res = await api.invoke("search_music", { service: NATIVE_SEARCH[svc], query: q });
+      res = await Promise.race([api.invoke("search_music", { service: NATIVE_SEARCH[svc], query: q }), timeout]);
     } catch (e) {
-      note = `${SERVICES[svc].name} não respondeu, mostrando resultados do Deezer.`;
+      note = `${SERVICES[svc].name} não respondeu (${String(e?.message || e)}). Mostrando resultados do Deezer.`;
       console.warn("busca nativa falhou:", e);
+      if (seq !== searchSeq) return;
+      res = await deezer;
     }
   }
   if (seq !== searchSeq) return;
@@ -958,6 +1014,8 @@ function renderSettings() {
   $("#offVal").textContent = `${settings.lyricsOffset > 0 ? "+" : ""}${settings.lyricsOffset.toFixed(1).replace(".", ",")} s`;
   $("#btnLyrics").classList.toggle("on", settings.lyrics);
   document.body.classList.toggle("no-lyrics", !settings.lyrics);
+  document.body.classList.toggle("lyrics-line", settings.lyricsMode !== "chunks");
+  document.querySelectorAll("#segLyrics button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.lyricsMode));
   for (const c of ["solid", "thin", "outline"]) document.body.classList.toggle(`clock-${c}`, settings.clockStyle === c);
   document.querySelectorAll("#segClock button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.clockStyle));
   $("#swDiscord").classList.toggle("on", settings.discord);
@@ -1004,6 +1062,16 @@ $("#segBg").addEventListener("click", (e) => {
   saveSettings();
   renderSettings();
   applyBackground();
+});
+$("#segLyrics").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-v]");
+  if (!b) return;
+  settings.lyricsMode = b.dataset.v;
+  shownLine = null;
+  shownText = "";
+  $("#lyricChunk").textContent = "";
+  saveSettings();
+  renderSettings();
 });
 $("#segClock").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-v]");

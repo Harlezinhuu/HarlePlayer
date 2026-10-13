@@ -226,6 +226,7 @@ fn main() {
             build_tray(app)?;
             media::start_watcher(app.handle().clone());
             discord::start();
+            search::warm_up();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

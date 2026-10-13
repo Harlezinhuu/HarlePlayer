@@ -104,6 +104,11 @@ pub(crate) fn http_bytes(url: &str) -> Result<Vec<u8>, String> {
     Ok(buf)
 }
 
+/// Prepara a busca do SoundCloud em segundo plano (chamado quando o app abre).
+pub fn warm_up() {
+    std::thread::spawn(soundcloud::warm_up);
+}
+
 /// Baixa o áudio de uma música do SoundCloud (link da faixa) pra tocar dentro do app.
 pub fn soundcloud_audio(permalink: &str) -> Result<Vec<u8>, String> {
     soundcloud::audio(permalink)
@@ -147,8 +152,10 @@ mod soundcloud {
     }
 
     /// O site carrega o client_id dentro de um dos arquivos .js da página inicial.
+    /// Baixa todos os .js ao mesmo tempo e fica com o primeiro que tiver o id.
     fn fetch_client_id() -> Result<String, String> {
-        let html = http_get("https://soundcloud.com/").map_err(err_text)?;
+        let html = http_get("https://soundcloud.com/")
+            .map_err(|e| format!("não abriu soundcloud.com ({})", err_text(e)))?;
         if let Some(id) = find_client_id(&html) {
             return Ok(id);
         }
@@ -164,23 +171,63 @@ mod soundcloud {
                 None => break,
             }
         }
-        // geralmente está num dos últimos scripts
-        for src in scripts.iter().rev() {
-            if let Ok(js) = http_get(src) {
-                if let Some(id) = find_client_id(&js) {
-                    return Ok(id);
-                }
+        if scripts.is_empty() {
+            return Err("a página do SoundCloud veio sem os scripts (bloqueio ou captcha?)".into());
+        }
+        // geralmente está num dos últimos; baixa tudo em paralelo
+        let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
+        let total = scripts.len();
+        for src in scripts.into_iter().rev() {
+            let tx = tx.clone();
+            std::thread::spawn(move || {
+                let found = http_get(&src).ok().and_then(|js| find_client_id(&js));
+                let _ = tx.send(found);
+            });
+        }
+        drop(tx);
+        for _ in 0..total {
+            match rx.recv_timeout(Duration::from_secs(20)) {
+                Ok(Some(id)) => return Ok(id),
+                Ok(None) => continue,
+                Err(_) => break,
             }
         }
-        Err("Não consegui conectar na busca do SoundCloud".into())
+        Err("não achei o client_id nos scripts do SoundCloud".into())
+    }
+
+    /// Arquivo onde o client_id fica guardado entre uma abertura e outra.
+    fn cache_file() -> std::path::PathBuf {
+        let base = std::env::var_os("LOCALAPPDATA")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        base.join("com.harlezinhuu.harleplayer").join("soundcloud_client_id.txt")
     }
 
     fn client_id(refresh: bool) -> Result<String, String> {
         let mut guard = CLIENT_ID.lock().unwrap();
+        if guard.is_none() && !refresh {
+            if let Ok(saved) = std::fs::read_to_string(cache_file()) {
+                let saved = saved.trim().to_string();
+                if saved.len() == 32 && saved.chars().all(|c| c.is_ascii_alphanumeric()) {
+                    *guard = Some(saved);
+                }
+            }
+        }
         if refresh || guard.is_none() {
-            *guard = Some(fetch_client_id()?);
+            let id = fetch_client_id().map_err(|e| format!("SoundCloud: {e}"))?;
+            let file = cache_file();
+            if let Some(dir) = file.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(&file, &id);
+            *guard = Some(id);
         }
         Ok(guard.clone().unwrap_or_default())
+    }
+
+    /// Deixa o client_id pronto antes da primeira busca.
+    pub fn warm_up() {
+        let _ = client_id(false);
     }
 
     fn api(path: &str, q: &str, limit: u32) -> Result<Value, String> {
@@ -374,8 +421,11 @@ mod soundcloud {
     }
 
     pub fn search(q: &str) -> Result<SearchResult, String> {
+        client_id(false)?; // garante o id antes das duas buscas paralelas
+        let q2 = q.to_string();
+        let users = std::thread::spawn(move || api("search/users", &q2, 10).unwrap_or(Value::Null));
         let tracks_json = api("search/tracks", q, 20)?;
-        let users_json = api("search/users", q, 10).unwrap_or(Value::Null);
+        let users_json = users.join().unwrap_or(Value::Null);
         Ok(parse(&tracks_json, &users_json))
     }
 

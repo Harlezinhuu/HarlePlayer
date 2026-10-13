@@ -462,3 +462,22 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
 .btn.primary { background: rgb(var(--accent)); border-color: transparent; color: #0b1020; font-weight: 700; }
 .btn.primary:disabled { opacity: .6; }
 body.mode-wallpaper #updateBar { display: none !important; }
+
+/* letra: modo verso inteiro (karaokê) */
+body.lyrics-line #lyrics { left: 38vw; right: 4vw; top: 7vh; height: 22vh; }
+body.lyrics-line #lyricChunk {
+  font-size: clamp(22px, 4.2vh, 50px);
+  line-height: 1.18;
+  max-width: 24ch;
+  text-wrap: balance;
+  color: rgba(var(--lyric), 0.38);
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+body.lyrics-line #lyricChunk span { transition: color .35s ease, text-shadow .35s ease; }
+body.lyrics-line #lyricChunk span.lit {
+  color: rgb(var(--lyric));
+  text-shadow: 0 2px 0 rgba(30, 50, 140, 0.45), 0 0 24px rgba(var(--lyric), 0.55);
+}
+body.mode-wallpaper.lyrics-line #lyrics { left: 10vw; right: 10vw; top: 40vh; height: 22vh; }
+body.mode-wallpaper.lyrics-line #lyricChunk { font-size: clamp(28px, 5.4vh, 66px); max-width: 26ch; }
