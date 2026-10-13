@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Player de música estético pro desktop — Spotify, YouTube Music, SoundCloud e Apple Music",
   "scripts": {
+    "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
     "demo": "npx --yes http-server src -p 5173 -c-1 -o",
