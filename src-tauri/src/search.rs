@@ -44,6 +44,31 @@ pub struct Artist {
     pub url: String,
 }
 
+/// Uma página da busca completa (aba "Músicas" ou "Artistas"), com cursor pra "carregar mais".
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchPage {
+    pub source: String,
+    pub tracks: Vec<Track>,
+    pub artists: Vec<Artist>,
+    /// passa de volta pra pegar a próxima página; None = acabou
+    pub next: Option<String>,
+}
+
+/// kind: "tracks" | "artists". cursor: o `next` da página anterior.
+pub fn search_page(service: &str, query: &str, kind: &str, cursor: Option<&str>) -> Result<SearchPage, String> {
+    let q = query.trim();
+    if q.is_empty() {
+        return Ok(SearchPage::default());
+    }
+    let artists = kind == "artists";
+    match service {
+        "soundcloud" => soundcloud::page(q, artists, cursor),
+        "ytmusic" => ytmusic::page(q, artists, cursor),
+        other => Err(format!("Busca não disponível para {other}")),
+    }
+}
+
 pub fn search(service: &str, query: &str) -> Result<SearchResult, String> {
     let q = query.trim();
     if q.is_empty() {
@@ -231,10 +256,14 @@ mod soundcloud {
     }
 
     fn api(path: &str, q: &str, limit: u32) -> Result<Value, String> {
+        api_at(path, q, limit, 0)
+    }
+
+    fn api_at(path: &str, q: &str, limit: u32, offset: u32) -> Result<Value, String> {
         for attempt in 0..2 {
             let id = client_id(attempt == 1)?;
             let url = format!(
-                "https://api-v2.soundcloud.com/{path}?q={}&client_id={id}&limit={limit}&app_locale=pt_BR",
+                "https://api-v2.soundcloud.com/{path}?q={}&client_id={id}&limit={limit}&offset={offset}&app_locale=pt_BR",
                 enc(q)
             );
             match http_get(&url) {
@@ -420,6 +449,24 @@ mod soundcloud {
         }
     }
 
+    /// Página da busca completa: 30 por vez, até ~300 resultados.
+    pub fn page(q: &str, artists: bool, cursor: Option<&str>) -> Result<SearchPage, String> {
+        const LIMIT: u32 = 30;
+        let offset: u32 = cursor.and_then(|c| c.parse().ok()).unwrap_or(0);
+        let path = if artists { "search/users" } else { "search/tracks" };
+        let v = api_at(path, q, LIMIT, offset)?;
+        let empty = Value::Null;
+        let r = if artists { parse(&empty, &v) } else { parse(&v, &empty) };
+        let got = v["collection"].as_array().map(|a| a.len()).unwrap_or(0) as u32;
+        let more = got > 0 && v["next_href"].as_str().is_some() && offset + LIMIT < 300;
+        Ok(SearchPage {
+            source: "soundcloud".into(),
+            tracks: r.tracks,
+            artists: r.artists,
+            next: more.then(|| (offset + LIMIT).to_string()),
+        })
+    }
+
     pub fn search(q: &str) -> Result<SearchResult, String> {
         client_id(false)?; // garante o id antes das duas buscas paralelas
         let q2 = q.to_string();
@@ -478,6 +525,82 @@ mod ytmusic {
     use super::*;
 
     static NULL: Value = Value::Null;
+
+    /// Filtros da busca (os mesmos que o site usa nas abas "Músicas" e "Artistas").
+    const FILTER_SONGS: &str = "EgWKAQIIAWoMEA4QChADEAQQCRAF";
+    const FILTER_ARTISTS: &str = "EgWKAQIgAWoMEA4QChADEAQQCRAF";
+
+    fn post(url: &str, body: &Value) -> Result<Value, String> {
+        let resp = ureq::post(url)
+            .set("User-Agent", BROWSER_UA)
+            .set("Content-Type", "application/json")
+            .set("Origin", "https://music.youtube.com")
+            .set("Referer", "https://music.youtube.com/")
+            .timeout(Duration::from_secs(12))
+            .send_string(&body.to_string());
+        let text = match resp {
+            Ok(r) => r.into_string().map_err(|e| e.to_string())?,
+            Err(ureq::Error::Status(c, _)) => return Err(format!("YouTube Music respondeu {c}")),
+            Err(e) => return Err(e.to_string()),
+        };
+        serde_json::from_str(&text).map_err(|e| e.to_string())
+    }
+
+    fn context() -> Value {
+        json!({ "client": {
+            "clientName": "WEB_REMIX",
+            "clientVersion": "1.20250310.01.00",
+            "hl": "pt",
+            "gl": "BR"
+        }})
+    }
+
+    /// Página da busca completa (filtrada em músicas ou artistas), com continuação.
+    pub fn page(q: &str, artists: bool, cursor: Option<&str>) -> Result<SearchPage, String> {
+        let base = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false";
+        let v = match cursor {
+            Some(c) => post(&format!("{base}&ctoken={0}&continuation={0}&type=next", enc(c)), &json!({ "context": context() }))?,
+            None => post(base, &json!({
+                "context": context(),
+                "query": q,
+                "params": if artists { FILTER_ARTISTS } else { FILTER_SONGS },
+            }))?,
+        };
+        Ok(page_from(&v, artists))
+    }
+
+    pub(super) fn page_from(v: &Value, artists: bool) -> SearchPage {
+        let mut out = SearchResult::default();
+        let mut seen = HashSet::new();
+        walk(v, &mut out, &mut seen);
+        let next = find_continuation(v);
+        let (tracks, artists_v) = if artists { (Vec::new(), out.artists) } else { (out.tracks, Vec::new()) };
+        let got = tracks.len() + artists_v.len();
+        SearchPage {
+            source: "ytmusic".into(),
+            tracks,
+            artists: artists_v,
+            next: if got > 0 { next } else { None },
+        }
+    }
+
+    /// Token de "mais resultados" (o nome do campo muda de versão pra versão do site).
+    fn find_continuation(v: &Value) -> Option<String> {
+        match v {
+            Value::Object(m) => {
+                for key in ["nextContinuationData", "continuationCommand"] {
+                    if let Some(c) = m.get(key) {
+                        if let Some(t) = c["continuation"].as_str().or_else(|| c["token"].as_str()) {
+                            return Some(t.to_string());
+                        }
+                    }
+                }
+                m.values().find_map(find_continuation)
+            }
+            Value::Array(a) => a.iter().find_map(find_continuation),
+            _ => None,
+        }
+    }
 
     pub fn search(q: &str) -> Result<SearchResult, String> {
         let body = json!({
@@ -823,6 +946,32 @@ mod tests {
         assert!(!r.tracks.is_empty());
         assert!(r.tracks[0].url.starts_with("https://soundcloud.com/"));
         assert!(!r.artists.is_empty());
+    }
+
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_busca_completa() {
+        for svc in ["soundcloud", "ytmusic"] {
+            let p1 = search_page(svc, "juice wrld", "tracks", None).expect("busca completa falhou");
+            let mut total = p1.tracks.len();
+            let mut next = p1.next.clone();
+            if let Some(c) = &next {
+                let p2 = search_page(svc, "juice wrld", "tracks", Some(c)).expect("página 2 falhou");
+                total += p2.tracks.len();
+                next = p2.next;
+            }
+            let a = search_page(svc, "juice wrld", "artists", None).expect("artistas falhou");
+            println!(
+                "Busca completa {svc}: {} faixas na 1ª página, {total} em 2 páginas, {} artistas, mais={}",
+                p1.tracks.len(),
+                a.artists.len(),
+                next.is_some()
+            );
+            assert!(p1.tracks.len() >= 10, "{svc}: poucas faixas");
+            assert!(p1.next.is_some(), "{svc}: sem 'carregar mais'");
+            assert!(total > p1.tracks.len(), "{svc}: página 2 vazia");
+            assert!(!a.artists.is_empty(), "{svc}: sem artistas");
+        }
     }
 
     #[test]

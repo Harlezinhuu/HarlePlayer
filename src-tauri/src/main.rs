@@ -67,6 +67,14 @@ async fn search_music(service: String, query: String) -> Result<search::SearchRe
         .map_err(|e| e.to_string())?
 }
 
+/// Busca completa (aba Músicas/Artistas), página por página.
+#[tauri::command]
+async fn search_page(service: String, query: String, kind: String, cursor: Option<String>) -> Result<search::SearchPage, String> {
+    tauri::async_runtime::spawn_blocking(move || search::search_page(&service, &query, &kind, cursor.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Baixa o áudio de uma música do SoundCloud pra tocar dentro do app.
 /// Volta os bytes crus (ArrayBuffer no JS), sem passar por base64.
 #[tauri::command]
@@ -252,6 +260,7 @@ fn main() {
             open_url,
             set_wallpaper_mode,
             search_music,
+            search_page,
             soundcloud_audio,
             youtube_audio,
             check_update,

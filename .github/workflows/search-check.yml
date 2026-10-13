@@ -39,5 +39,5 @@ jobs:
         if: always()
         shell: bash
         run: |
-          grep -aE "^test |SoundCloud:|YouTube Music:|áudio de|não tocou|panicked|left:|right:|falhou|yt-dlp" resultado.txt | head -40 |
+          grep -aE "^test |Busca completa|SoundCloud:|YouTube Music:|áudio de|não tocou|panicked|left:|right:|falhou|yt-dlp" resultado.txt | head -40 |
             while IFS= read -r l; do echo "::notice::$l"; done
