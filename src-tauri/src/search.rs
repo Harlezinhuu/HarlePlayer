@@ -232,7 +232,10 @@ mod soundcloud {
             match http_get(&format!("{url}{sep}client_id={id}")) {
                 Ok(t) => return serde_json::from_str(&t).map_err(|e| e.to_string()),
                 Err(HttpErr::Status(401 | 403)) if attempt == 0 => continue,
-                Err(HttpErr::Status(404)) => return Err("Música não encontrada no SoundCloud".into()),
+                Err(HttpErr::Status(404)) => {
+                    let path = url.split('?').next().unwrap_or(url).replace("https://api-v2.soundcloud.com", "");
+                    return Err(format!("SoundCloud não achou ({path})"));
+                }
                 Err(e) => return Err(format!("SoundCloud: {}", err_text(e))),
             }
         }
@@ -696,9 +699,11 @@ mod tests {
     #[test]
     #[ignore = "usa a internet"]
     fn ao_vivo_soundcloud_audio() {
-        let r = search("soundcloud", "juice wrld").expect("busca no SoundCloud falhou");
+        let mut tracks = search("soundcloud", "juice wrld").expect("busca no SoundCloud falhou").tracks;
+        tracks.truncate(3);
+        tracks.extend(search("soundcloud", "lofi beat").expect("busca no SoundCloud falhou").tracks.into_iter().take(3));
         let mut tocou = false;
-        for t in r.tracks.iter().take(5) {
+        for t in tracks.iter() {
             match soundcloud_audio(&t.url) {
                 Ok(bytes) => {
                     println!("áudio de '{}': {} KB, começa com {:02X?}", t.title, bytes.len() / 1024, &bytes[..8.min(bytes.len())]);
@@ -709,7 +714,7 @@ mod tests {
                 Err(e) => println!("'{}' não tocou: {e}", t.title),
             }
         }
-        assert!(tocou, "nenhuma das 5 primeiras músicas pôde ser baixada");
+        assert!(tocou, "nenhuma das músicas pôde ser baixada");
     }
 
     #[test]
