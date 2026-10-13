@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@200;300;500&family=DM+Serif+Display&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="bg-dynamic">
+<body class="bg-dynamic clock-solid">
   <!-- ===== Fundo ===== -->
   <div id="bg" aria-hidden="true">
     <div class="bg-art" id="bgArtA"></div>
@@ -171,6 +171,12 @@
         <span id="offVal">0,0 s</span>
         <button id="offPlus">+</button>
       </div>
+    </div>
+    <label class="row-label">Relógio</label>
+    <div class="seg" id="segClock">
+      <button data-v="solid">Sólido</button>
+      <button data-v="thin">Fino</button>
+      <button data-v="outline">Contorno</button>
     </div>
     <div class="row toggle-row">
       <span>Relógio 24 horas</span>

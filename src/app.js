@@ -48,6 +48,7 @@ const DEFAULTS = {
   lyrics: true,
   lyricsOffset: 0, // segundos (+ adianta a letra)
   clock24: true,
+  clockStyle: "solid", // solid | thin | outline
   wallpaperMode: false, // wallpaper animado atrás dos ícones
   wallpaperId: "builtin:aurora",
   discord: true, // Rich Presence
@@ -957,6 +958,8 @@ function renderSettings() {
   $("#offVal").textContent = `${settings.lyricsOffset > 0 ? "+" : ""}${settings.lyricsOffset.toFixed(1).replace(".", ",")} s`;
   $("#btnLyrics").classList.toggle("on", settings.lyrics);
   document.body.classList.toggle("no-lyrics", !settings.lyrics);
+  for (const c of ["solid", "thin", "outline"]) document.body.classList.toggle(`clock-${c}`, settings.clockStyle === c);
+  document.querySelectorAll("#segClock button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.clockStyle));
   $("#swDiscord").classList.toggle("on", settings.discord);
   $("#swDiscordSpotify").classList.toggle("on", settings.discordSpotify);
   $("#segBrowser").innerHTML = ["soundcloud", "ytmusic", "youtube"]
@@ -1001,6 +1004,13 @@ $("#segBg").addEventListener("click", (e) => {
   saveSettings();
   renderSettings();
   applyBackground();
+});
+$("#segClock").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-v]");
+  if (!b) return;
+  settings.clockStyle = b.dataset.v;
+  saveSettings();
+  renderSettings();
 });
 $("#segService").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-v]");

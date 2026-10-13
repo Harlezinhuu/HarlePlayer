@@ -90,24 +90,48 @@ body.bg-transparent .bg-shade { background: linear-gradient(90deg, rgba(4, 8, 20
   font-size: clamp(12px, 1.5vh, 16px); font-weight: 600; letter-spacing: 0.02em;
   color: rgba(225, 235, 255, 0.85); margin-left: 0.4vw;
 }
+/* tamanho do relógio (o painel "Continuar ouvindo" começa logo abaixo) */
+:root { --clock: clamp(72px, min(17vh, 11vw), 220px); }
 #time {
-  font-family: var(--font-clock);
+  line-height: 0.9;
+  margin-top: 0.4vh;
+  font-size: var(--clock);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Sólido (padrão): grosso, com degradê na cor da capa */
+body.clock-solid #time {
+  font-family: "Inter", var(--font-ui);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  background: linear-gradient(180deg, #fff 15%, rgba(var(--lyric), 0.92) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 6px 26px rgba(var(--accent), 0.45));
+}
+/* Fino */
+body.clock-thin #time {
+  font-family: "Inter", var(--font-ui);
   font-weight: 200;
-  font-stretch: 70%;
-  font-size: 30vh;
+  letter-spacing: -0.03em;
+  color: rgba(245, 248, 255, 0.92);
+  text-shadow: 0 0 34px rgba(var(--accent), 0.5);
+}
+/* Contorno (o estilo do vídeo, sem esticar) */
+body.clock-outline #time {
+  font-family: var(--font-clock);
+  font-weight: 300;
+  font-size: calc(var(--clock) * 1.25);
   line-height: 0.82;
-  letter-spacing: -0.01em;
-  transform: scaleY(1.32);
-  transform-origin: top left;
-  margin-top: 0.6vh;
-  color: rgba(var(--accent), 0.16);
-  -webkit-text-stroke: 1.6px rgba(200, 220, 255, 0.85);
-  text-shadow: 0 0 40px rgba(var(--accent), 0.35);
+  letter-spacing: 0.01em;
+  color: rgba(var(--accent), 0.14);
+  -webkit-text-stroke: 1.5px rgba(210, 228, 255, 0.9);
+  text-shadow: 0 0 36px rgba(var(--accent), 0.35);
 }
 
 /* ---------- continuar ouvindo ---------- */
 #queue {
-  position: fixed; z-index: 3; left: 3.6vw; top: 34vh; bottom: 13vh;
+  position: fixed; z-index: 3; left: 3.6vw; top: calc(5vh + var(--clock) * 1.12 + 5.5vh); bottom: 13vh;
   width: clamp(230px, 19vw, 300px);
   padding: 12px; display: flex; flex-direction: column; gap: 6px;
   overflow: hidden;
@@ -328,7 +352,6 @@ body.playing .ico-play { display: none !important; }
 /* ---------- telas menores ---------- */
 @media (max-width: 1100px) {
   .mini-time { display: none; }
-  #time { font-size: 24vh; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
@@ -402,7 +425,7 @@ body.mode-wallpaper #serviceMenu,
 body.mode-wallpaper #toast { display: none !important; }
 
 body.mode-wallpaper #clock { left: auto; right: 5vw; top: 7vh; text-align: right; }
-body.mode-wallpaper #time { transform-origin: top right; }
+body.mode-wallpaper { --clock: clamp(90px, min(22vh, 14vw), 280px); }
 body.mode-wallpaper #lyrics { left: 8vw; right: 8vw; top: 38vh; height: 26vh; }
 body.mode-wallpaper #lyricChunk { font-size: clamp(44px, 10vh, 120px); max-width: 16ch; }
 
