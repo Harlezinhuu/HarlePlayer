@@ -39,6 +39,14 @@ pub fn current_version() -> String {
 }
 
 pub fn check() -> Result<UpdateInfo, String> {
+    match check_api() {
+        Ok(info) => Ok(info),
+        // API sem resposta (ex.: limite de 60 consultas/hora estourado): usa o redirecionamento do site
+        Err(api_err) => check_site().map_err(|e| format!("{api_err} / {e}")),
+    }
+}
+
+fn check_api() -> Result<UpdateInfo, String> {
     let current = current_version();
     let resp = ureq::get(&format!("https://api.github.com/repos/{REPO}/releases/latest"))
         .set("User-Agent", "HarlePlayer-updater")
@@ -68,6 +76,39 @@ pub fn check() -> Result<UpdateInfo, String> {
         url,
         page: v["html_url"].as_str().unwrap_or("").to_string(),
     })
+}
+
+/// github.com/…/releases/latest redireciona pra …/releases/tag/<versão> (sem limite de consultas).
+fn check_site() -> Result<UpdateInfo, String> {
+    let current = current_version();
+    let agent = ureq::AgentBuilder::new().redirects(0).timeout(Duration::from_secs(15)).build();
+    let resp = match agent
+        .get(&format!("https://github.com/{REPO}/releases/latest"))
+        .set("User-Agent", "HarlePlayer-updater")
+        .call()
+    {
+        Ok(r) => r,
+        Err(ureq::Error::Status(_, r)) => r,
+        Err(e) => return Err(e.to_string()),
+    };
+    let location = resp.header("location").unwrap_or("").to_string();
+    let tag = tag_from_location(&location).ok_or("GitHub não informou a versão")?;
+    let latest = tag.trim_start_matches(['v', 'V']).to_string();
+    let url = format!(
+        "https://github.com/{REPO}/releases/download/{tag}/Harle.Player_{latest}_x64-setup.exe"
+    );
+    Ok(UpdateInfo {
+        available: newer(&latest, &current),
+        current,
+        latest,
+        url: Some(url),
+        page: location,
+    })
+}
+
+fn tag_from_location(loc: &str) -> Option<String> {
+    let tag = loc.split("/releases/tag/").nth(1)?.split(['?', '#', '/']).next()?;
+    (!tag.is_empty()).then(|| tag.to_string())
 }
 
 /// Baixa o instalador e deixa um comando esperando o app fechar pra instalar.
@@ -110,7 +151,16 @@ pub fn download_and_schedule(url: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::newer;
+    use super::{newer, tag_from_location};
+
+    #[test]
+    fn le_versao_do_redirecionamento() {
+        assert_eq!(
+            tag_from_location("https://github.com/Harlezinhuu/HarlePlayer/releases/tag/0.3.1").as_deref(),
+            Some("0.3.1")
+        );
+        assert_eq!(tag_from_location("https://github.com/Harlezinhuu/HarlePlayer/releases"), None);
+    }
 
     #[test]
     fn compara_versoes() {

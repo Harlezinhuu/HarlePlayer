@@ -803,12 +803,7 @@ function currentChunk(pos) {
 // ===================================================================
 let lastSec = -1;
 function frame() {
-  if (!IS_WALLPAPER) {
-  setTimeout(() => checkUpdate(false), 4000);
-  setInterval(() => checkUpdate(false), 6 * 3600e3);
-}
-
-requestAnimationFrame(frame);
+  requestAnimationFrame(frame);
   if (paused) return;
   const pos = positionNow();
   const pct = media.durationMs > 0 ? (pos / media.durationMs) * 100 : 0;
@@ -1337,7 +1332,10 @@ function onMedia(s, fromLocal = false) {
 // Atualizações (GitHub Releases)
 // ===================================================================
 let pendingUpdate = null;
+let checkingUpdate = false;
 async function checkUpdate(manual = false) {
+  if (checkingUpdate) return;
+  checkingUpdate = true;
   try {
     const info = await api.invoke("check_update");
     if (!info) return manual && toast("Modo demo: sem atualizações");
@@ -1351,6 +1349,8 @@ async function checkUpdate(manual = false) {
     }
   } catch (e) {
     if (manual) toast(`Não consegui procurar atualização: ${e}`);
+  } finally {
+    checkingUpdate = false;
   }
 }
 $("#btnUpdate").addEventListener("click", async () => {
