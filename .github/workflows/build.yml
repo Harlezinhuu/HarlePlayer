@@ -3,9 +3,13 @@ name: Build
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ["v*", "[0-9]*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de uma Release já criada (ex.: 0.1.0) pra anexar o instalador"
+        required: false
 
 permissions:
   contents: write
@@ -57,8 +61,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: "Harle Player ${{ github.ref_name }}"
+          tagName: ${{ inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '' }}
+          releaseName: "Harle Player ${{ inputs.tag || github.ref_name }}"
           releaseBody: "Baixe o instalador **Harle Player_x64-setup.exe** aqui embaixo em *Assets*."
           releaseDraft: false
           prerelease: false
