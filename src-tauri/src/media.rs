@@ -185,6 +185,16 @@ mod imp {
                         Some(s) => match read_state(&s) {
                             Ok(mut st) => {
                                 fails = 0;
+                                // O Chrome às vezes esconde a música ("Um site está com mídia
+                                // aberta"); aí o nome vem do título da janela do navegador.
+                                let mut from_window = None;
+                                if crate::detect::is_placeholder(&st.title) {
+                                    if let Some(bt) = crate::detect::track_from_browser_windows() {
+                                        st.title = bt.title;
+                                        st.artist = bt.artist;
+                                        from_window = Some(bt.service);
+                                    }
+                                }
                                 let key = format!("{}\u{1f}{}\u{1f}{}", st.title, st.artist, st.source);
                                 if key != last_key {
                                     last_key = key;
@@ -194,7 +204,9 @@ mod imp {
                                 }
                                 // Detecta o serviço na troca de música e confere de novo
                                 // algumas vezes (o título da aba pode demorar a atualizar).
-                                if service_checks < 6 && (service_checks == 0 || service == "browser" || service_checks % 3 == 0) {
+                                if let Some(svc) = from_window {
+                                    service = svc;
+                                } else if service_checks < 6 && (service_checks == 0 || service == "browser" || service_checks % 3 == 0) {
                                     service = crate::detect::service_for(&st.source, &st.title);
                                 }
                                 service_checks = service_checks.saturating_add(1);
