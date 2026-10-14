@@ -4,9 +4,11 @@
 mod detect;
 mod discord;
 mod media;
+mod mini;
 mod net;
 mod search;
 mod updater;
+mod visualizer;
 mod volume;
 mod wallpaper;
 mod ytdlp;
@@ -19,6 +21,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, Wry};
 /// quando o modo é trocado pelas configurações do app.
 struct TrayState {
     wallpaper_item: CheckMenuItem<Wry>,
+    mini_item: CheckMenuItem<Wry>,
 }
 
 // ---------- comandos chamados pelo front ----------
@@ -135,6 +138,63 @@ async fn set_volume(source: String, level: f32) -> Result<volume::VolumeInfo, St
         .map_err(|e| e.to_string())?
 }
 
+/// Abre/fecha o mini player.
+#[tauri::command]
+async fn set_mini(app: AppHandle, open: bool) -> Result<bool, String> {
+    let r = mini::set(&app, open);
+    if let Some(tray) = app.try_state::<TrayState>() {
+        let _ = tray.mini_item.set_checked(*r.as_ref().unwrap_or(&false));
+    }
+    r
+}
+
+/// Liga/desliga a escuta do som pro visualizador.
+#[tauri::command]
+fn set_visualizer(app: AppHandle, on: bool) {
+    visualizer::set(&app, on);
+}
+
+/// Baixa uma imagem (capa) pra desenhar no card do Wrapped sem "sujar" o canvas.
+#[tauri::command]
+async fn image_bytes(url: String) -> Result<tauri::ipc::Response, String> {
+    if !url.starts_with("https://") {
+        return Err("Só imagens https".into());
+    }
+    let bytes = tauri::async_runtime::spawn_blocking(move || search::http_bytes(&url))
+        .await
+        .map_err(|e| e.to_string())??;
+    if bytes.len() > 8 * 1024 * 1024 {
+        return Err("Imagem grande demais".into());
+    }
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Salva o card do Wrapped em Imagens\Harle Player e mostra no Explorer.
+#[tauri::command]
+fn save_image(name: String, data_base64: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_base64.trim_start_matches("data:image/png;base64,"))
+        .map_err(|e| e.to_string())?;
+    if !bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        return Err("Imagem inválida".into());
+    }
+    let safe: String = name.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').take(60).collect();
+    let home = std::env::var_os("USERPROFILE").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let dir = home.join("Pictures").join("Harle Player");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(format!("{}.png", if safe.is_empty() { "wrapped".into() } else { safe }));
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("explorer")
+            .raw_arg(format!("/select,\"{}\"", path.display()))
+            .spawn();
+    }
+    Ok(path.display().to_string())
+}
+
 /// Atualiza o "Ouvindo …" no perfil do Discord.
 #[tauri::command]
 fn discord_set(presence: discord::Presence) {
@@ -196,6 +256,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         false,
         None::<&str>,
     )?;
+    let mini_item = CheckMenuItem::with_id(app, "mini", "Mini player", true, false, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let play = MenuItem::with_id(app, "playpause", "Tocar / pausar", true, None::<&str>)?;
     let next = MenuItem::with_id(app, "next", "Próxima", true, None::<&str>)?;
@@ -204,11 +265,12 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[&show, &wall, &sep1, &play, &next, &prev, &sep2, &quit],
+        &[&show, &mini_item, &wall, &sep1, &play, &next, &prev, &sep2, &quit],
     )?;
 
     app.manage(TrayState {
         wallpaper_item: wall.clone(),
+        mini_item: mini_item.clone(),
     });
 
     let mut builder = TrayIconBuilder::with_id("main-tray")
@@ -226,6 +288,16 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
                         let _ = tray.wallpaper_item.set_checked(ok && on);
                     }
                     let _ = handle.emit("wallpaper-mode", ok && on);
+                });
+            }
+            "mini" => {
+                let handle = app.clone();
+                let open = !mini::is_open(app);
+                tauri::async_runtime::spawn(async move {
+                    let ok = mini::set(&handle, open).unwrap_or(false);
+                    if let Some(tray) = handle.try_state::<TrayState>() {
+                        let _ = tray.mini_item.set_checked(ok);
+                    }
                 });
             }
             "playpause" => tray_media("toggle"),
@@ -274,6 +346,10 @@ fn main() {
             youtube_audio,
             check_update,
             install_update,
+            set_mini,
+            set_visualizer,
+            image_bytes,
+            save_image,
             get_volume,
             set_volume,
             discord_set,
