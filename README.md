@@ -20,23 +20,33 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 
 ## ✨ O que ele faz
 
-- **Funciona com qualquer app de música.** Lê o que está tocando pelo sistema de mídia do Windows (o mesmo do controle de volume), sem login e sem chave de API.
-- **Carrossel 3D de capas** com o que você ouviu por último. Dá pra girar com a roda do mouse ou com as setas ← →.
-- **Letra sincronizada** aparecendo em pedacinhos animados em cima do fundo, via [LRCLIB](https://lrclib.net).
-- **Relógio gigante** em fonte condensada, no estilo de tela de bloqueio.
-- **Fundo dinâmico** feito com a capa da música. A cor de destaque do app também muda conforme a capa.
-- **Toca dentro do próprio app**, sem abrir navegador: SoundCloud (o áudio é baixado e tocado aqui) e YouTube Music / YouTube (pelo player oficial do YouTube, escondido; se o vídeo bloquear, o áudio vem pelo [yt-dlp](https://github.com/yt-dlp/yt-dlp), baixado e atualizado sozinho). Fila com próxima/anterior, avança sozinho e funciona com as teclas de mídia.
-- **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…). O clique toca a música na hora. Pros outros serviços, ou se a busca do site falhar, os resultados vêm do Deezer.
-- **Fila no estilo Spotify**: *Tocar a seguir* e *Adicionar à fila* pelo menu ⋯ (ou clique direito), arrastar pra reordenar, embaralhar e repetir (a fila ou uma música).
-- **Playlists**: crie, renomeie e monte playlists com músicas do SoundCloud e do YouTube Music; toque em ordem ou embaralhado.
-- **Controles**: tocar/pausar, próxima, anterior, barra de progresso clicável e volume (do player interno, ou só do app que está tocando, como o Spotify).
-- **Wallpaper animado atrás dos ícones**, no estilo Wallpaper Engine. Mostra o relógio, a letra e a música tocando direto na área de trabalho.
-- **Biblioteca de wallpapers**: vídeo (mp4/webm), GIF ou imagem, mais o **Aurora**, um fundo animado embutido que muda de cor conforme a capa.
-- **Discord Rich Presence**: mostra "Ouvindo SoundCloud" (ou YouTube Music, YouTube…) no seu perfil, com capa, artista, barra de tempo e botão "Ouvir no …". Detecta sozinho onde a música está tocando, até no navegador.
-- Fica na **bandeja do sistema** quando você fecha.
-- **Se atualiza sozinho**: avisa quando sai versão nova nas Releases e instala com um clique.
+### 🎧 Ouvir
+- **Funciona com qualquer app de música.** Lê o que está tocando pelo sistema de mídia do Windows, sem login e sem chave de API. O Spotify continua tocando no próprio Spotify (contando pro Wrapped), e o Harle Player só mostra e controla.
+- **Toca SoundCloud e YouTube Music dentro do app**, sem abrir navegador. O áudio do SoundCloud é baixado e tocado aqui. O YouTube toca pelo player oficial, escondido, e se o vídeo bloquear, o áudio vem pelo [yt-dlp](https://github.com/yt-dlp/yt-dlp), baixado e atualizado sozinho.
+- **Fila no estilo Spotify**: *Tocar a seguir* e *Adicionar à fila* pelo menu **⋯** ou pelo clique direito, arrastar pra reordenar, embaralhar, repetir (a fila ou uma música) e limpar.
+- **Playlists**: crie, renomeie, reordene e toque em ordem ou embaralhado, com músicas do SoundCloud e do YouTube Music.
+- **Volume**: do player interno, ou só do app que está tocando (o Spotify, por exemplo), pelo mixer do Windows, sem mexer no volume do PC inteiro.
+- Teclas de mídia, tocar/pausar, próxima, anterior e barra de progresso clicável.
 
-<img src="docs/search.jpg" alt="Busca com resultados e artistas" />
+### 🔎 Buscar
+- **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…).
+- **Abas Tudo · Músicas · Artistas**: os principais resultados e a lista completa, que carrega mais conforme você rola. Clicou numa música, ela toca e o resto da lista vira a fila.
+- Pros outros serviços, ou se a busca do site falhar, os resultados vêm do Deezer.
+
+### 🎨 Visual
+- **Relógio gigante** em três estilos: Sólido, Fino e Contorno.
+- **Letra sincronizada** via [LRCLIB](https://lrclib.net): o verso inteiro com as palavras acendendo no estilo karaokê, ou em pedaços grandes animados.
+- **Carrossel 3D de capas** com o que você ouviu por último. Dá pra girar com a roda do mouse ou com as setas ← →.
+- **Fundo dinâmico** feito com a capa da música. A cor de destaque do app também muda conforme a capa.
+- **Wallpaper animado atrás dos ícones**, no estilo Wallpaper Engine, com relógio, letra e música tocando direto na área de trabalho.
+- **Biblioteca de wallpapers**: vídeo (mp4/webm), GIF ou imagem, mais o **Aurora**, um fundo animado embutido que muda de cor conforme a capa.
+
+### 🔌 Integrações
+- **Discord Rich Presence**: "Ouvindo SoundCloud" (ou YouTube Music, YouTube…) no seu perfil, com capa, artista, barra de tempo e botão "Ouvir no …". Detecta sozinho onde a música está tocando, até no navegador.
+- **Se atualiza sozinho**: avisa quando sai versão nova nas Releases, baixa, instala e abre de novo com um clique.
+- Fica na **bandeja do sistema** quando você fecha.
+
+<img src="docs/search.jpg" alt="Busca completa: lista de músicas com a fila ao lado" />
 
 <img src="docs/wallpaper.jpg" alt="Modo wallpaper: relógio, letra e música tocando na área de trabalho" />
 
@@ -48,10 +58,12 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 | `/` ou `Ctrl+K` | Pesquisar |
 | `←` `→` | Girar o carrossel |
 | `Esc` | Fechar busca / configurações |
+| Clique direito numa música | Tocar a seguir, adicionar à fila ou a uma playlist |
+| Roda do mouse no 🔊 | Ajustar o volume |
 
 ## 📥 Baixar
 
-Vá em [**Releases**](https://github.com/Harlezinhuu/HarlePlayer/releases) e baixe o `Harle Player_x.x.x_x64-setup.exe`.
+Vá em [**Releases**](https://github.com/Harlezinhuu/HarlePlayer/releases) e baixe o `Harle.Player_x.x.x_x64-setup.exe`. Depois de instalado, as versões novas chegam sozinhas pelo próprio app.
 
 ## 🎮 Configurando o Discord
 
@@ -83,41 +95,47 @@ Pra mexer só no visual, sem compilar nada, use `npm run demo`.
 ### Testes
 
 ```bash
-npm test                                              # front: letra, títulos, cores…
+npm test                                              # front: fila, letra, títulos, cores…
 cargo test --manifest-path src-tauri/Cargo.toml       # Rust: Discord, detecção, leitura das buscas
 cargo test --manifest-path src-tauri/Cargo.toml ao_vivo -- --ignored --nocapture   # busca de verdade
 ```
 
-O GitHub Actions roda tudo a cada push. A busca ao vivo também roda todo dia, pra avisar se o SoundCloud ou o YouTube Music mudarem alguma coisa. Ele abre o front no navegador com músicas e letra de exemplo.
+O GitHub Actions roda tudo a cada push e gera o instalador. A busca ao vivo também roda todo dia, pra avisar se o SoundCloud ou o YouTube Music mudarem alguma coisa.
+
+O `npm run demo` abre o front no navegador com músicas, letra e busca de exemplo.
 
 ## 🧩 Como funciona
 
 ```
-┌────────────── Front (src/) ──────────────┐      ┌────────────── Rust (src-tauri/) ───────────────┐
-│ HTML + CSS + JS puro                     │      │ media.rs → GlobalSystemMediaTransportControls │
-│ relógio · carrossel 3D · letra · busca   │◀────▶│   lê título/artista/capa/posição a cada 400ms │
-│                                          │ IPC  │   e manda play/pause/próxima pro app de música│
-│ duas janelas: player e wallpaper         │      │ net.rs   → LRCLIB (letras) e Deezer (busca)   │
-└──────────────────────────────────────────┘      │ wallpaper.rs → janela atrás dos ícones        │
-                                                  │   (camada WorkerW do Explorer)                │
-                                                  │ main.rs  → bandeja e comandos                 │
-                                                  └───────────────────────────────────────────────┘
+┌──────────── Front (src/) ────────────┐        ┌──────────────── Rust (src-tauri/src/) ────────────────┐
+│ HTML + CSS + JS puro, sem build      │        │ media.rs     SMTC do Windows: o que toca + controles  │
+│ app.js     tela, busca, painel       │        │ detect.rs    qual serviço (app ou aba do navegador)   │
+│ player.js  player interno + YouTube  │◀──IPC─▶│ search.rs    SoundCloud api-v2 · YouTube Music        │
+│ queue.js   fila (funções puras)      │        │ net.rs       LRCLIB (letras) e Deezer                 │
+│                                      │        │ ytdlp.rs     reserva do YouTube                       │
+│ lib.js     letra, cores, títulos     │        │ volume.rs    volume por app (WASAPI)                  │
+│                                      │        │ discord.rs   Rich Presence (named pipe)               │
+│ 2 janelas: player e wallpaper        │        │ wallpaper.rs janela na camada WorkerW                 │
+└──────────────────────────────────────┘        │ updater.rs   Releases do GitHub → instala e reabre    │
+                                                └───────────────────────────────────────────────────────┘
 ```
 
 O modo wallpaper usa o mesmo truque do Wallpaper Engine e do Lively: o Explorer cria uma camada chamada **WorkerW** entre o papel de parede e os ícones, e o app pendura uma segunda janela nela. 
 
 A busca do SoundCloud usa a `api-v2` com o `client_id` público que o próprio site carrega. A do YouTube Music usa a API interna `youtubei/v1/search`, a mesma usada pela [ytmusicapi](https://github.com/sigma67/ytmusicapi). Nenhuma das duas é oficial: se o site mudar, o app mostra um aviso e cai pro Deezer.
 
-A posição da música é medida pelo app de origem e interpolada no front a cada frame. Cada verso da letra (LRC) é quebrado em pedaços de 1–3 palavras, e o tempo do verso é distribuído entre eles pelo tamanho de cada pedaço.
+A posição da música é medida pelo app de origem e interpolada no front a cada frame. No modo karaokê, o tempo de cada verso da letra (LRC) é distribuído entre as palavras pelo tamanho delas.
+
+A fila guarda quais músicas foram adicionadas por você: elas entram logo depois da atual, antes do resto (resultados da busca ou playlist), igual no Spotify. Música salva só com nome (vinda do Deezer, por exemplo) é procurada no SoundCloud/YouTube na hora de tocar.
 
 ## 🗺️ Próximos passos
 
-- [ ] Suporte a macOS
-- [ ] Tocar direto pelo app (Spotify Web API / MusicKit)
 - [ ] Iniciar junto com o Windows
+- [ ] Importar playlists do SoundCloud e do YouTube Music
 - [ ] Wallpaper em vários monitores
 - [ ] Wallpapers que reagem ao som (visualizador)
 - [ ] Temas e posição dos elementos personalizáveis
+- [ ] Suporte a macOS
 
 ## 📄 Licença
 
