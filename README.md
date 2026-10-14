@@ -36,6 +36,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 ### 🎨 Visual
 - **Relógio gigante** em três estilos: Sólido, Fino e Contorno.
 - **Letra sincronizada** via [LRCLIB](https://lrclib.net): o verso inteiro com as palavras acendendo no estilo karaokê, ou em pedaços grandes animados.
+- **Tela cheia** (`F11`): os controles somem sozinhos e fica só o relógio, a capa e a letra, tipo tela de descanso.
 - **Carrossel 3D de capas** com o que você ouviu por último. Dá pra girar com a roda do mouse ou com as setas ← →.
 - **Fundo dinâmico** feito com a capa da música. A cor de destaque do app também muda conforme a capa.
 - **Wallpaper animado atrás dos ícones**, no estilo Wallpaper Engine, com relógio, letra e música tocando direto na área de trabalho.
@@ -57,7 +58,8 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 | `Espaço` | Tocar / pausar |
 | `/` ou `Ctrl+K` | Pesquisar |
 | `←` `→` | Girar o carrossel |
-| `Esc` | Fechar busca / configurações |
+| `F11` (ou duplo clique no topo) | Tela cheia: depois de 3 s parado, sobra só relógio, capa e letra |
+| `Esc` | Fechar busca / configurações / sair da tela cheia |
 | Clique direito numa música | Tocar a seguir, adicionar à fila ou a uma playlist |
 | Roda do mouse no 🔊 | Ajustar o volume |
 

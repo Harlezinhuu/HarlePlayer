@@ -614,3 +614,15 @@ body.lyrics-line #lyricChunk span.lit {
 body.mode-wallpaper.lyrics-line #lyrics { left: 10vw; right: 10vw; top: 40vh; height: 22vh; }
 body.mode-wallpaper.lyrics-line #lyricChunk { font-size: clamp(28px, 5.4vh, 66px); max-width: 26ch; }
 @keyframes pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+
+/* ---------- tela cheia ---------- */
+.ico-unfull { display: none; }
+body.fullscreen .ico-full { display: none; }
+body.fullscreen .ico-unfull { display: block; }
+#dock, #queue, #titlebar, #stage, #updateBar { transition: opacity .6s ease, transform .6s var(--ease); }
+body.ui-idle { cursor: none; }
+body.ui-idle #dock { opacity: 0; transform: translateX(-50%) translateY(24px); pointer-events: none; }
+body.ui-idle #queue { opacity: 0; transform: translateX(-24px); pointer-events: none; }
+body.ui-idle #titlebar, body.ui-idle #updateBar, body.ui-idle #toast { opacity: 0; pointer-events: none; }
+/* sem o painel, o carrossel ocupa o centro */
+body.ui-idle #stage { transform: translateX(calc(-0.5 * (clamp(230px, 19vw, 300px) + 2vw))) scale(1.06); }

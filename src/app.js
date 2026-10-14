@@ -1831,6 +1831,47 @@ function setWallpaperMode(on, fromTray = false) {
 // ===================================================================
 // Janela
 // ===================================================================
+// ===================================================================
+// Tela cheia: depois de 3 s sem mexer o mouse, sobra só relógio, capa e letra
+// ===================================================================
+let isFull = false;
+let idleTimer = null;
+async function setFullscreen(on) {
+  isFull = !!on;
+  try {
+    if (T?.window) await T.window.getCurrentWindow().setFullscreen(isFull);
+    else if (isFull) await document.documentElement.requestFullscreen?.();
+    else if (document.fullscreenElement) await document.exitFullscreen?.();
+  } catch (e) {
+    console.warn("tela cheia:", e);
+  }
+  document.body.classList.toggle("fullscreen", isFull);
+  wakeUi();
+}
+function wakeUi() {
+  document.body.classList.remove("ui-idle");
+  clearTimeout(idleTimer);
+  if (!isFull) return;
+  idleTimer = setTimeout(() => {
+    // não esconde enquanto tem algo aberto ou o mouse está em cima de um controle
+    const busy = !$("#settings").hidden || !$("#results").hidden || !$("#ctxMenu").hidden || !$("#volumePop").hidden ||
+      document.activeElement === input || document.querySelector("#dock:hover, #queue:hover, #titlebar:hover");
+    if (busy) return wakeUi();
+    document.body.classList.add("ui-idle");
+  }, 3000);
+}
+for (const ev of ["pointermove", "pointerdown", "keydown", "wheel"]) document.addEventListener(ev, wakeUi, { passive: true });
+document.addEventListener("fullscreenchange", () => {
+  if (!T && !document.fullscreenElement && isFull) {
+    isFull = false;
+    document.body.classList.remove("fullscreen", "ui-idle");
+  }
+});
+$("#btnFull").addEventListener("click", () => setFullscreen(!isFull));
+$("#titlebar").addEventListener("dblclick", (e) => {
+  if (!e.target.closest(".win-controls")) setFullscreen(!isFull);
+});
+
 $("#btnMin").addEventListener("click", () => {
   if (T?.window) T.window.getCurrentWindow().minimize();
 });
@@ -1865,7 +1906,14 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "ArrowLeft") {
     focusOffset--;
     renderCarousel();
+  } else if (e.key === "F11") {
+    e.preventDefault();
+    setFullscreen(!isFull);
   } else if (e.key === "Escape") {
+    const somethingOpen = !$("#settings").hidden || !$("#results").hidden || !$("#serviceMenu").hidden || !$("#ctxMenu").hidden || !$("#volumePop").hidden;
+    if (!somethingOpen && isFull) return setFullscreen(false);
+    $("#ctxMenu").hidden = true;
+    $("#volumePop").hidden = true;
     $("#settings").hidden = true;
     $("#serviceMenu").hidden = true;
     $("#btnSettings").classList.remove("on");
