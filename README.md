@@ -34,9 +34,17 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Abas Tudo · Músicas · Artistas**: os principais resultados e a lista completa, que carrega mais conforme você rola. Clicou numa música, ela toca e o resto da lista vira a fila.
 - Pros outros serviços, ou se a busca do site falhar, os resultados vêm do Deezer.
 
+### 📊 Sua retrospectiva
+- **Seu "Wrapped" particular**, de qualquer app (Spotify, SoundCloud, YouTube…): minutos ouvidos, top músicas e artistas, onde você mais ouve e seu horário favorito, em 7 dias, 30 dias, no ano ou desde o começo.
+- **Gera uma imagem pros stories** (1080×1920) pra salvar ou copiar e postar. Tudo fica salvo só no seu PC.
+
+<img src="docs/wrapped.jpg" alt="Retrospectiva com top músicas, artistas, serviços e horário" />
+
 ### 🎨 Visual
 - **Relógio gigante** em três estilos: Sólido, Fino e Contorno.
 - **Letra sincronizada** via [LRCLIB](https://lrclib.net): o verso inteiro com as palavras acendendo no estilo karaokê, ou em pedaços grandes animados.
+- **Reage ao som**: o fundo, o brilho do relógio e a capa pulsam com o grave da música que está tocando, de qualquer app (inclusive no wallpaper).
+- **Mini player**: uma janelinha sempre por cima de tudo, no canto da tela, com capa e controles. É só arrastar pra onde quiser.
 - **Tela cheia** (`F11`): os controles somem sozinhos e fica só o relógio, a capa e a letra, tipo tela de descanso.
 - **Carrossel 3D de capas** com o que você ouviu por último. Dá pra girar com a roda do mouse ou com as setas ← →.
 - **Fundo dinâmico** feito com a capa da música. A cor de destaque do app também muda conforme a capa.
@@ -113,13 +121,15 @@ O `npm run demo` abre o front no navegador com músicas, letra e busca de exempl
 ┌──────────── Front (src/) ────────────┐        ┌──────────────── Rust (src-tauri/src/) ────────────────┐
 │ HTML + CSS + JS puro, sem build      │        │ media.rs     SMTC do Windows: o que toca + controles  │
 │ app.js     tela, busca, painel       │        │ detect.rs    qual serviço (app ou aba do navegador)   │
-│ player.js  player interno + YouTube  │◀──IPC─▶│ search.rs    SoundCloud api-v2 · YouTube Music        │
+│ player.js  player interno + YouTube  │◀──IPC─▶│ search.rs    SoundCloud · YouTube Music · playlists   │
 │ queue.js   fila (funções puras)      │        │ net.rs       LRCLIB (letras) e Deezer                 │
-│                                      │        │ ytdlp.rs     reserva do YouTube                       │
+│ stats.js   retrospectiva (puras)     │        │ ytdlp.rs     reserva do YouTube                       │
 │ lib.js     letra, cores, títulos     │        │ volume.rs    volume por app (WASAPI)                  │
+│ mini.js    mini player               │        │ visualizer.rs graves do som do PC (WASAPI)            │
 │                                      │        │ discord.rs   Rich Presence (named pipe)               │
-│ 2 janelas: player e wallpaper        │        │ wallpaper.rs janela na camada WorkerW                 │
-└──────────────────────────────────────┘        │ updater.rs   Releases do GitHub → instala e reabre    │
+│ 3 janelas: player, wallpaper, mini   │        │ wallpaper.rs janela na camada WorkerW                 │
+└──────────────────────────────────────┘        │ mini.rs      janelinha sempre por cima                │
+                                                │ updater.rs   Releases do GitHub → instala e reabre    │
                                                 └───────────────────────────────────────────────────────┘
 ```
 

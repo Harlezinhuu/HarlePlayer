@@ -2313,7 +2313,7 @@ function renderWrapped() {
     return;
   }
   const img = (c) => (c ? `<img src="${esc(c)}" alt="" loading="lazy" draggable="false">` : `<div class="ph"></div>`);
-  const tracks = r.tracks.slice(0, 5).map((t, i) => `<div class="wr-row"><span class="n">${i + 1}</span>${img(t.cover)}<div class="tx"><b>${esc(t.title)}</b><span>${esc(t.artist || "—")}</span></div><span class="val">${t.plays}× · ${fmtMin(t.sec)}</span></div>`).join("");
+  const tracks = r.tracks.slice(0, 10).map((t, i) => `<div class="wr-row"><span class="n">${i + 1}</span>${img(t.cover)}<div class="tx"><b>${esc(t.title)}</b><span>${esc(t.artist || "—")}</span></div><span class="val">${t.plays}× · ${fmtMin(t.sec)}</span></div>`).join("");
   const artists = r.artists.slice(0, 5).map((a, i) => `<div class="wr-row"><span class="n">${i + 1}</span>${img(a.cover)}<div class="tx"><b>${esc(a.name)}</b><span>${a.tracks} ${a.tracks === 1 ? "música" : "músicas"}</span></div><span class="val">${fmtMin(a.sec)}</span></div>`).join("");
   const svcColor = (id) => SERVICES[id]?.color || (id === "browser" ? "#8b93a7" : "#5d6475");
   const svcBar = r.services.map((x) => `<i style="width:${(x.sec / r.totalSec) * 100}%;background:${svcColor(x.svc)}"></i>`).join("");
@@ -2328,7 +2328,7 @@ function renderWrapped() {
       <div class="wr-stat"><b>${fmtNum(r.plays)}</b><span>vezes que deu play</span></div>
     </div>
     <div class="wr-cols">
-      <div class="wr-box"><h3>Top músicas</h3>${tracks}</div>
+      <div class="wr-box"><h3>Top 10 músicas</h3>${tracks}</div>
       <div class="wr-side">
         <div class="wr-box wr-artists"><h3>Top artistas</h3>${artists}</div>
         <div class="wr-box"><h3>Onde você ouve</h3><div class="wr-svc">${svcBar}</div><div class="wr-legend">${svcLegend}</div></div>

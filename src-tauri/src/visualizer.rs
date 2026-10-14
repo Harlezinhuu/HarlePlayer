@@ -174,7 +174,13 @@ mod tests {
             a.push((i as f32 * 60.0 * std::f32::consts::TAU / rate as f32).sin() * 0.5);
         }
         a.take();
-        for i in 0..((rate as f32 * secs) as u32) {
+        // descarta 20 ms (o filtro ainda está "saindo" do grave anterior)
+        let skip = rate / 50;
+        for i in 0..skip {
+            a.push((i as f32 * freq * std::f32::consts::TAU / rate as f32).sin() * 0.5);
+        }
+        a.take();
+        for i in skip..skip + (rate as f32 * secs) as u32 {
             a.push((i as f32 * freq * std::f32::consts::TAU / rate as f32).sin() * 0.5);
         }
         a.take()
