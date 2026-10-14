@@ -8,7 +8,7 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "demo": "npx --yes http-server src -p 5173 -c-1 -o",
-    "test": "node --test tests/lib.test.mjs tests/queue.test.mjs"
+    "test": "node --test tests/lib.test.mjs tests/queue.test.mjs tests/stats.test.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

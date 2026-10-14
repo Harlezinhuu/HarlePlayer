@@ -35,7 +35,15 @@ jobs:
         with:
           workspaces: "./src-tauri -> target"
       - name: cargo test
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        shell: bash
+        run: |
+          set +e
+          cargo test --manifest-path src-tauri/Cargo.toml --color never 2>&1 | tee cargo.txt
+          status=${PIPESTATUS[0]}
+          # erros de compilação aparecem como aviso na página do workflow (dá pra ler sem baixar o log)
+          grep -aE "^(error|  -->|[0-9 ]+\|.*\^|test .* FAILED|thread .* panicked)" cargo.txt | head -60 |
+            while IFS= read -r l; do echo "::notice::$l"; done
+          exit $status
 
   windows:
     needs: [test-front, test-rust]

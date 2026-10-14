@@ -85,6 +85,7 @@ export function createDemoApi() {
   let demoVol = 0.6;
   return {
     demo: true,
+    sampleTracks: TRACKS,
     listen(ev, cb) {
       (listeners[ev] ||= []).push(cb);
       return Promise.resolve(() => {});

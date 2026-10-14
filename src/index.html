@@ -17,6 +17,7 @@
     <img id="bgImage" alt="" hidden />
     <video id="bgVideo" autoplay muted loop playsinline hidden></video>
     <canvas id="bgCanvas" hidden></canvas>
+    <div class="bg-pulse"></div>
     <div class="bg-shade"></div>
     <div class="bg-grain"></div>
   </div>
@@ -128,6 +129,12 @@
       <button id="btnVolume" class="tool-btn" title="Volume (roda do mouse ajusta)" aria-label="Volume">
         <svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" class="vol-body" /><path class="vol-w1" d="M15.5 9.2a4 4 0 0 1 0 5.6" /><path class="vol-w2" d="M18 6.8a7.5 7.5 0 0 1 0 10.4" /><path class="vol-x" d="M16 9.5l5 5M21 9.5l-5 5" /></svg>
       </button>
+      <button id="btnWrapped" class="tool-btn" title="Sua retrospectiva (o que você mais ouviu)" aria-label="Retrospectiva">
+        <svg viewBox="0 0 24 24"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9" /></svg>
+      </button>
+      <button id="btnMini" class="tool-btn" title="Mini player (fica por cima de tudo)" aria-label="Mini player">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5" /><rect x="11.5" y="11.5" width="7" height="5" rx="1.2" class="fill-soft" /></svg>
+      </button>
       <button id="btnLyrics" class="tool-btn on" title="Letras" aria-label="Letras">
         <svg viewBox="0 0 24 24"><path d="M5 6h14M5 11h10M5 16h7" /><circle cx="18" cy="17" r="2.2" /><path d="M20.2 17V10" /></svg>
       </button>
@@ -166,6 +173,11 @@
     <div class="row toggle-row">
       <span>Wallpaper animado <small class="muted">(atrás dos ícones)</small></span>
       <button class="switch" id="swWallpaper" role="switch"></button>
+    </div>
+
+    <div class="row toggle-row">
+      <span>Reagir ao som <small class="muted">(fundo, relógio e capa pulsam com o grave)</small></span>
+      <button class="switch" id="swVisualizer" role="switch"></button>
     </div>
 
     <label class="row-label">Fundo do player</label>
@@ -223,6 +235,39 @@
       <a href="#" id="lnkGithub">GitHub</a>
     </div>
   </section>
+
+  <!-- ===== Retrospectiva ("seu Wrapped") ===== -->
+  <section id="wrapped" class="glass" hidden>
+    <div class="wr-head">
+      <div>
+        <h2>Sua retrospectiva</h2>
+        <p class="muted" id="wrSub">Tudo que você ouviu, de qualquer app</p>
+      </div>
+      <div class="seg" id="wrPeriod">
+        <button data-p="7d">7 dias</button>
+        <button data-p="30d" class="sel">30 dias</button>
+        <button data-p="year">Este ano</button>
+        <button data-p="all">Tudo</button>
+      </div>
+      <button id="wrClose" class="win-btn" aria-label="Fechar"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+    </div>
+    <div id="wrBody"></div>
+    <div class="wr-foot">
+      <span class="muted">Fica salvo só neste PC.</span>
+      <button id="wrShare" class="btn primary">Gerar imagem pra postar</button>
+    </div>
+  </section>
+
+  <div id="shareModal" hidden>
+    <div class="share-box glass">
+      <canvas id="shareCanvas" width="1080" height="1920"></canvas>
+      <div class="share-actions">
+        <button id="shareSave" class="btn primary">Salvar imagem</button>
+        <button id="shareCopy" class="btn">Copiar</button>
+        <button id="shareClose" class="btn">Fechar</button>
+      </div>
+    </div>
+  </div>
 
   <div id="toast" role="status"></div>
 

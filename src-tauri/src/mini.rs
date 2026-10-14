@@ -24,7 +24,7 @@ pub fn set(app: &AppHandle, open: bool) -> Result<bool, String> {
         let _ = w.show();
         return Ok(true);
     }
-    let mut b = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html".into()))
+    let mut b = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("mini.html".into()))
         .title("Harle Player — Mini")
         .inner_size(W, H)
         .decorations(false)

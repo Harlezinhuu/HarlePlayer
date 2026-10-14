@@ -3,6 +3,7 @@
 // Aberto direto no navegador, roda em "modo demo" com dados de exemplo.
 
 import { createPlayer } from "./player.js";
+import * as Stats from "./stats.js";
 import { fmt, esc, rgbToHsl, hslToRgb, slotOf, cleanTitle, cleanArtist, lyricVariants, parseLrc, isPlaceholderTitle } from "./lib.js";
 
 const $ = (s) => document.querySelector(s);
@@ -14,6 +15,7 @@ const api = T
       demo: false,
       invoke: (cmd, args) => T.core.invoke(cmd, args),
       listen: (ev, cb) => T.event.listen(ev, (e) => cb(e.payload)),
+      emit: (ev, payload) => T.event.emit(ev, payload),
     }
   : (await import("./demo.js")).createDemoApi();
 
@@ -51,6 +53,7 @@ const DEFAULTS = {
   lyricsOffset: 0, // segundos (+ adianta a letra)
   volume: 0.8, // volume do player interno (0–1)
   queueTab: "fila", // "fila" | "recentes" | "playlists"
+  visualizer: true, // fundo/relógio/capa reagem ao grave
   clock24: true,
   clockStyle: "solid", // solid | thin | outline
   wallpaperMode: false, // wallpaper animado atrás dos ícones
@@ -408,7 +411,7 @@ function startAurora() {
   let last = 0;
   const draw = (t) => {
     auroraRaf = requestAnimationFrame(draw);
-    if (paused || t - last < 40) return; // ~25 fps: leve pra GPU
+    if (paused || t - last < (beat > 0.02 ? 33 : 40)) return; // ~25–30 fps: leve pra GPU
     last = t;
     const w = auroraCanvas.width, h = auroraCanvas.height, s = t / 1000;
     ctx.globalCompositeOperation = "source-over";
@@ -418,10 +421,10 @@ function startAurora() {
     for (const b of blobs) {
       const x = (0.5 + 0.42 * Math.sin(s * 0.11 * b.sp + b.px)) * w;
       const y = (0.5 + 0.38 * Math.cos(s * 0.09 * b.sp + b.py)) * h;
-      const r = b.r * Math.max(w, h) * (0.9 + 0.1 * Math.sin(s * 0.4 + b.px));
+      const r = b.r * Math.max(w, h) * (0.9 + 0.1 * Math.sin(s * 0.4 + b.px)) * (1 + beat * 0.28);
       const [R, G, B] = hslToRgb((((accentHue + b.dh) % 1) + 1) % 1, 0.75, b.l);
       const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, `rgba(${R},${G},${B},0.55)`);
+      g.addColorStop(0, `rgba(${R},${G},${B},${(0.55 + beat * 0.3).toFixed(3)})`);
       g.addColorStop(1, `rgba(${R},${G},${B},0)`);
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
@@ -1141,6 +1144,32 @@ function renderMini() {
   if (cover) nc.src = cover;
   else nc.removeAttribute("src");
   document.body.classList.toggle("playing", !!(media.available && media.playing));
+  publishNow();
+}
+
+// ---------- mini player: manda o que está tocando pra janelinha ----------
+let lastNowSig = "";
+let lastNowCover = null;
+function publishNow(full = false) {
+  if (IS_WALLPAPER || !api.emit) return;
+  const curKey = keyOf(media);
+  const h = curKey ? history.find((x) => x.key === curKey) : null;
+  const cover = curKey ? media.coverUrl || media.thumb || h?.thumb || null : null;
+  const pos = Math.round(positionNow());
+  const msg = {
+    title: curKey ? media.title : "",
+    artist: curKey ? media.artist || media.album || "" : "",
+    playing: !!(media.available && media.playing),
+    positionMs: pos,
+    durationMs: media.durationMs || 0,
+    accent: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
+  };
+  const sig = JSON.stringify([msg.title, msg.artist, msg.playing, msg.durationMs, Math.round(pos / 2000), msg.accent]);
+  if (!full && sig === lastNowSig && cover === lastNowCover) return;
+  lastNowSig = sig;
+  if (full || cover !== lastNowCover) msg.cover = cover;
+  lastNowCover = cover;
+  api.emit("hp-now", msg).catch?.(() => {});
 }
 
 $("#progress").addEventListener("click", (e) => {
@@ -1274,8 +1303,32 @@ function currentChunk(pos) {
 // Loop de animação: progresso + letra
 // ===================================================================
 let lastSec = -1;
+// ---------- visualizador: suaviza o grave que vem do Rust ----------
+let beat = 0;
+let beatTarget = 0;
+let beatShown = -1;
+function updateBeat() {
+  const on = settings.visualizer && media.available && media.playing;
+  const target = on ? beatTarget : 0;
+  beat += (target - beat) * (target > beat ? 0.55 : 0.12); // sobe rápido, desce devagar
+  if (beat < 0.004) beat = 0;
+  if (Math.abs(beat - beatShown) > 0.004) {
+    beatShown = beat;
+    document.documentElement.style.setProperty("--beat", beat.toFixed(3));
+  }
+}
+api.listen("audio-level", (lv) => {
+  // grave pesa mais; o volume geral ajuda em música sem grave
+  beatTarget = Math.min(1, Math.max(0, (lv?.[0] || 0) * 0.85 + (lv?.[1] || 0) * 0.25) ** 1.6);
+});
+if (api.demo) {
+  // modo demo: um "bumbo" falso no ritmo de 120 bpm
+  setInterval(() => (beatTarget = media.playing ? (Date.now() % 500 < 120 ? 0.9 : 0.15 + Math.random() * 0.1) : 0), 40);
+}
+
 function frame() {
   requestAnimationFrame(frame);
+  updateBeat();
   if (paused) return;
   const pos = positionNow();
   const pct = media.durationMs > 0 ? (pos / media.durationMs) * 100 : 0;
@@ -1698,6 +1751,8 @@ function renderSettings() {
   for (const c of ["solid", "thin", "outline"]) document.body.classList.toggle(`clock-${c}`, settings.clockStyle === c);
   document.querySelectorAll("#segClock button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.clockStyle));
   $("#swDiscord").classList.toggle("on", settings.discord);
+  $("#swVisualizer").classList.toggle("on", settings.visualizer);
+  document.body.classList.toggle("no-visualizer", !settings.visualizer);
   $("#swDiscordSpotify").classList.toggle("on", settings.discordSpotify);
   $("#segBrowser").innerHTML = ["soundcloud", "ytmusic", "youtube"]
     .map((id) => `<button data-v="${id}" class="${id === settings.browserService ? "sel" : ""}">${esc(SERVICES[id].name)}</button>`)
@@ -1809,7 +1864,23 @@ const toggleLyrics = () => {
   renderSettings();
 };
 $("#swLyrics").addEventListener("click", toggleLyrics);
+$("#swVisualizer").addEventListener("click", () => {
+  settings.visualizer = !settings.visualizer;
+  saveSettings();
+  renderSettings();
+  api.invoke("set_visualizer", { on: settings.visualizer }).catch(() => {});
+});
 $("#btnLyrics").addEventListener("click", toggleLyrics);
+$("#btnMini").addEventListener("click", async () => {
+  const open = !$("#btnMini").classList.contains("on");
+  try {
+    const r = await api.invoke("set_mini", { open });
+    $("#btnMini").classList.toggle("on", !!r);
+    if (r === undefined) window.open("mini.html", "mini", "width=380,height=120"); // modo demo
+  } catch (e) {
+    toast(`Não abriu o mini player: ${e}`);
+  }
+});
 
 // ===================================================================
 // Volume: player interno → volume dele; música de fora (Spotify, navegador…)
@@ -2016,10 +2087,12 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     setFullscreen(!isFull);
   } else if (e.key === "Escape") {
-    const somethingOpen = !$("#settings").hidden || !$("#results").hidden || !$("#serviceMenu").hidden || !$("#ctxMenu").hidden || !$("#volumePop").hidden;
+    const somethingOpen = !$("#wrapped").hidden || !$("#settings").hidden || !$("#results").hidden || !$("#serviceMenu").hidden || !$("#ctxMenu").hidden || !$("#volumePop").hidden;
     if (!somethingOpen && isFull) return setFullscreen(false);
     $("#ctxMenu").hidden = true;
     $("#volumePop").hidden = true;
+    if (!$("#shareModal").hidden) return ($("#shareModal").hidden = true);
+    $("#wrapped").hidden = true;
     $("#settings").hidden = true;
     $("#serviceMenu").hidden = true;
     $("#btnSettings").classList.remove("on");
@@ -2154,6 +2227,324 @@ function onMedia(s, fromLocal = false) {
 }
 
 // ===================================================================
+// Retrospectiva ("seu Wrapped"): conta o que você ouve, de qualquer app
+// ===================================================================
+let stats = Stats.emptyStats();
+try {
+  stats = { ...Stats.emptyStats(), ...(store.get("hp.stats", null) || {}) };
+} catch {}
+let statsDirty = false;
+const saveStats = () => {
+  if (!statsDirty || IS_WALLPAPER) return;
+  statsDirty = false;
+  try {
+    store.set("hp.stats", stats);
+  } catch {
+    // localStorage cheio: joga fora o mais velho e tenta de novo
+    Stats.prune(stats, 120);
+    try { store.set("hp.stats", stats); } catch {}
+  }
+};
+const session = { key: "", sec: 0, counted: false };
+const statsCover = new Map(); // capa pequena por música (pra não guardar imagem grande)
+
+async function smallCover(key) {
+  if (statsCover.has(key)) return statsCover.get(key);
+  const h = history.find((x) => x.key === key);
+  let c = media.coverUrl && /^https:/.test(media.coverUrl) ? media.coverUrl : null;
+  if (!c && (h?.thumb || media.thumb)) c = await shrinkImage(h?.thumb || media.thumb, 96);
+  statsCover.set(key, c);
+  return c;
+}
+
+if (!IS_WALLPAPER) {
+  setInterval(async () => {
+    const key = keyOf(media);
+    if (!key || !media.playing || media.loading) return;
+    if (session.key !== key) Object.assign(session, { key, sec: 0, counted: false });
+    session.sec++;
+    const cover = stats.meta[key]?.cover ? null : await smallCover(key);
+    Stats.record(stats, { key, title: media.title, artist: media.artist, service: playingService(), cover }, 1);
+    const need = media.durationMs > 0 ? Math.min(30, media.durationMs / 2000) : 30;
+    if (!session.counted && session.sec >= need) {
+      session.counted = true;
+      Stats.countPlay(stats, key);
+    }
+    statsDirty = true;
+  }, 1000);
+  setInterval(saveStats, 20000);
+  window.addEventListener("beforeunload", saveStats);
+  Stats.prune(stats, 400);
+}
+
+// modo demo: inventa um mês de escuta pra tela não ficar vazia
+if (api.demo && !Object.keys(stats.days).length && api.sampleTracks) {
+  const svcs = ["spotify", "spotify", "soundcloud", "ytmusic", "spotify"];
+  for (let d = 0; d < 30; d++) {
+    const date = new Date(Date.now() - d * 86400e3);
+    api.sampleTracks.forEach((t, i) => {
+      const times = Math.max(0, Math.round((8 - i) * Math.random() * 1.4));
+      for (let k = 0; k < times; k++) {
+        date.setHours([22, 23, 21, 14, 9, 18][(i + k) % 6]);
+        const key = `${t.title}␟${t.artist}`;
+        Stats.record(stats, { key, title: t.title, artist: t.artist, service: svcs[i % 5], cover: t.thumb }, t.durationMs / 1000, date);
+        Stats.countPlay(stats, key, date);
+      }
+    });
+  }
+}
+
+let wrPeriod = "30d";
+const fmtMin = (sec) => {
+  const m = Math.round(sec / 60);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+};
+const fmtNum = (n) => n.toLocaleString("pt-BR");
+
+function renderWrapped() {
+  saveStats();
+  const { from, to, label } = Stats.periodRange(wrPeriod);
+  const r = Stats.summarize(stats, from, to);
+  for (const b of $$("#wrPeriod button")) b.classList.toggle("sel", b.dataset.p === wrPeriod);
+  $("#wrSub").textContent = `${label} · tudo que você ouviu, de qualquer app`;
+  $("#wrShare").disabled = !r.totalSec;
+  if (r.totalSec < 60) {
+    $("#wrBody").innerHTML = `<div class="wr-empty">Ainda não tem muita coisa aqui.<br>Ouça umas músicas (no Spotify, SoundCloud, YouTube…) com o Harle Player aberto e volte depois. 🎧</div>`;
+    return;
+  }
+  const img = (c) => (c ? `<img src="${esc(c)}" alt="" loading="lazy" draggable="false">` : `<div class="ph"></div>`);
+  const tracks = r.tracks.slice(0, 5).map((t, i) => `<div class="wr-row"><span class="n">${i + 1}</span>${img(t.cover)}<div class="tx"><b>${esc(t.title)}</b><span>${esc(t.artist || "—")}</span></div><span class="val">${t.plays}× · ${fmtMin(t.sec)}</span></div>`).join("");
+  const artists = r.artists.slice(0, 5).map((a, i) => `<div class="wr-row"><span class="n">${i + 1}</span>${img(a.cover)}<div class="tx"><b>${esc(a.name)}</b><span>${a.tracks} ${a.tracks === 1 ? "música" : "músicas"}</span></div><span class="val">${fmtMin(a.sec)}</span></div>`).join("");
+  const svcColor = (id) => SERVICES[id]?.color || (id === "browser" ? "#8b93a7" : "#5d6475");
+  const svcBar = r.services.map((x) => `<i style="width:${(x.sec / r.totalSec) * 100}%;background:${svcColor(x.svc)}"></i>`).join("");
+  const svcLegend = r.services.map((x) => `<span style="--c:${svcColor(x.svc)}">${esc(serviceName(x.svc) || x.svc)} ${Math.round((x.sec / r.totalSec) * 100)}%</span>`).join("");
+  const maxH = Math.max(...r.hours, 1);
+  const hours = r.hours.map((h, i) => `<i class="${i === r.peakHour ? "peak" : ""}" style="height:${Math.max(3, (h / maxH) * 100)}%" title="${i}h"></i>`).join("");
+  $("#wrBody").innerHTML = `
+    <div class="wr-stats">
+      <div class="wr-stat hero"><b>${fmtNum(Math.round(r.totalSec / 60))}</b><span>minutos ouvindo</span></div>
+      <div class="wr-stat"><b>${fmtNum(r.tracks.length)}</b><span>músicas diferentes</span></div>
+      <div class="wr-stat"><b>${fmtNum(r.artists.length)}</b><span>artistas</span></div>
+      <div class="wr-stat"><b>${fmtNum(r.plays)}</b><span>vezes que deu play</span></div>
+    </div>
+    <div class="wr-cols">
+      <div class="wr-box"><h3>Top músicas</h3>${tracks}</div>
+      <div class="wr-side">
+        <div class="wr-box wr-artists"><h3>Top artistas</h3>${artists}</div>
+        <div class="wr-box"><h3>Onde você ouve</h3><div class="wr-svc">${svcBar}</div><div class="wr-legend">${svcLegend}</div></div>
+        <div class="wr-box"><h3>Seu horário${r.peakHour >= 0 ? ` · mais às ${r.peakHour}h` : ""}</h3><div class="wr-hours">${hours}</div><div class="wr-hours-l"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div></div>
+      </div>
+    </div>`;
+}
+
+function openWrapped() {
+  $("#settings").hidden = true;
+  $("#wrapped").hidden = false;
+  renderWrapped();
+}
+$("#btnWrapped").addEventListener("click", () => ($("#wrapped").hidden ? openWrapped() : ($("#wrapped").hidden = true)));
+$("#wrClose").addEventListener("click", () => ($("#wrapped").hidden = true));
+$("#wrPeriod").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-p]");
+  if (!b) return;
+  wrPeriod = b.dataset.p;
+  renderWrapped();
+});
+
+// ---------- card 1080×1920 pra postar nos stories ----------
+async function loadImg(src) {
+  if (!src) return null;
+  let url = src;
+  let revoke = null;
+  if (/^https:/.test(src) && !api.demo) {
+    // baixa pelo Rust: imagem de outro site "sujaria" o canvas e ele não deixaria salvar
+    try {
+      const buf = await api.invoke("image_bytes", { url: src });
+      url = revoke = URL.createObjectURL(new Blob([new Uint8Array(buf)]));
+    } catch {
+      return null;
+    }
+  }
+  const im = await new Promise((res) => {
+    const el = new Image();
+    el.onload = () => res(el);
+    el.onerror = () => res(null);
+    el.src = url;
+  });
+  if (revoke) setTimeout(() => URL.revokeObjectURL(revoke), 5000);
+  return im;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawCover(ctx, im, x, y, size, radius) {
+  ctx.save();
+  roundRect(ctx, x, y, size, size, radius);
+  ctx.clip();
+  if (im) {
+    const s = Math.min(im.width, im.height);
+    ctx.drawImage(im, (im.width - s) / 2, (im.height - s) / 2, s, s, x, y, size, size);
+  } else {
+    ctx.fillStyle = "rgba(255,255,255,.12)";
+    ctx.fillRect(x, y, size, size);
+  }
+  ctx.restore();
+}
+function fitText(ctx, text, maxW) {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + "…").width > maxW) t = t.slice(0, -1);
+  return t + "…";
+}
+
+async function drawShareCard() {
+  const { from, to, label } = Stats.periodRange(wrPeriod);
+  const r = Stats.summarize(stats, from, to);
+  const c = $("#shareCanvas");
+  const ctx = c.getContext("2d");
+  const W = 1080, H = 1920;
+  await document.fonts?.ready;
+  const acc = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "120, 170, 255";
+  const [ar, ag, ab] = acc.split(",").map((x) => +x);
+  // fundo: degradê com a cor de destaque
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, `rgb(${ar * 0.55 | 0},${ag * 0.55 | 0},${ab * 0.55 | 0})`);
+  bg.addColorStop(0.55, "#0a0d1a");
+  bg.addColorStop(1, "#05060c");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  const glow = ctx.createRadialGradient(W * 0.8, H * 0.12, 0, W * 0.8, H * 0.12, W * 0.9);
+  glow.addColorStop(0, `rgba(${ar},${ag},${ab},0.55)`);
+  glow.addColorStop(1, `rgba(${ar},${ag},${ab},0)`);
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  const P = 90;
+  ctx.fillStyle = "rgba(255,255,255,.75)";
+  ctx.font = "700 34px Inter, sans-serif";
+  ctx.fillText("MEU HARLE WRAPPED", P, 150);
+  ctx.fillStyle = `rgb(${ar},${ag},${ab})`;
+  ctx.font = "700 34px Inter, sans-serif";
+  ctx.fillText(label.toUpperCase(), P, 200);
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "800 190px Inter, sans-serif";
+  const mins = fmtNum(Math.round(r.totalSec / 60));
+  ctx.fillText(mins, P - 6, 400);
+  ctx.font = "600 44px Inter, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,.8)";
+  ctx.fillText("minutos ouvindo música", P, 470);
+
+  // artista nº 1
+  const top = r.artists[0];
+  const topIm = await loadImg(top?.cover);
+  let y = 580;
+  if (top) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(P + 110, y + 110, 110, 0, Math.PI * 2);
+    ctx.clip();
+    drawCover(ctx, topIm, P, y, 220, 0);
+    ctx.restore();
+    ctx.fillStyle = "rgba(255,255,255,.65)";
+    ctx.font = "700 30px Inter, sans-serif";
+    ctx.fillText("ARTISTA Nº 1", P + 260, y + 80);
+    ctx.fillStyle = "#fff";
+    ctx.font = "800 68px Inter, sans-serif";
+    ctx.fillText(fitText(ctx, top.name, W - P * 2 - 260), P + 260, y + 155);
+    ctx.font = "500 32px Inter, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,.7)";
+    ctx.fillText(`${fmtMin(top.sec)} juntos`, P + 260, y + 205);
+  }
+
+  // top 5 músicas
+  y = 880;
+  ctx.fillStyle = "rgba(255,255,255,.65)";
+  ctx.font = "700 30px Inter, sans-serif";
+  ctx.fillText("TOP MÚSICAS", P, y);
+  y += 40;
+  const list = r.tracks.slice(0, 5);
+  const ims = await Promise.all(list.map((t) => loadImg(t.cover)));
+  list.forEach((t, i) => {
+    const rowY = y + i * 150;
+    ctx.fillStyle = i === 0 ? `rgb(${ar},${ag},${ab})` : "rgba(255,255,255,.5)";
+    ctx.font = "800 48px Inter, sans-serif";
+    ctx.fillText(String(i + 1), P, rowY + 80);
+    drawCover(ctx, ims[i], P + 70, rowY + 10, 116, 18);
+    ctx.fillStyle = "#fff";
+    ctx.font = "700 44px Inter, sans-serif";
+    ctx.fillText(fitText(ctx, t.title, W - P * 2 - 220), P + 216, rowY + 62);
+    ctx.fillStyle = "rgba(255,255,255,.65)";
+    ctx.font = "500 34px Inter, sans-serif";
+    ctx.fillText(fitText(ctx, `${t.artist || "—"} · ${t.plays}×`, W - P * 2 - 220), P + 216, rowY + 108);
+  });
+
+  // rodapé: serviços + horário
+  y = 1745;
+  const svcs = r.services.slice(0, 3).map((x) => `${serviceName(x.svc) || x.svc} ${Math.round((x.sec / r.totalSec) * 100)}%`).join("  ·  ");
+  ctx.fillStyle = "rgba(255,255,255,.7)";
+  ctx.font = "600 32px Inter, sans-serif";
+  ctx.fillText(fitText(ctx, svcs, W - P * 2), P, y);
+  if (r.peakHour >= 0) ctx.fillText(`Horário favorito: ${r.peakHour}h`, P, y + 50);
+  ctx.fillStyle = "rgba(255,255,255,.45)";
+  ctx.font = "600 28px Inter, sans-serif";
+  ctx.fillText("Harle Player", P, H - 55);
+  ctx.textAlign = "right";
+  ctx.fillText("github.com/Harlezinhuu", W - P, H - 55);
+  ctx.textAlign = "left";
+}
+
+$("#wrShare").addEventListener("click", async () => {
+  $("#wrShare").disabled = true;
+  try {
+    await drawShareCard();
+    $("#shareModal").hidden = false;
+  } catch (e) {
+    toast(`Não consegui gerar a imagem: ${e?.message || e}`, 4000);
+  } finally {
+    $("#wrShare").disabled = false;
+  }
+});
+$("#shareClose").addEventListener("click", () => ($("#shareModal").hidden = true));
+$("#shareModal").addEventListener("click", (e) => {
+  if (e.target.id === "shareModal") $("#shareModal").hidden = true;
+});
+$("#shareSave").addEventListener("click", async () => {
+  const data = $("#shareCanvas").toDataURL("image/png");
+  const name = `harle-wrapped-${Stats.dayKey(new Date())}`;
+  if (api.demo) {
+    const a = document.createElement("a");
+    a.href = data;
+    a.download = `${name}.png`;
+    a.click();
+    return;
+  }
+  try {
+    const path = await api.invoke("save_image", { name, dataBase64: data });
+    toast(`Salva em ${path}`, 4000);
+  } catch (e) {
+    toast(`Não consegui salvar: ${e}`, 4000);
+  }
+});
+$("#shareCopy").addEventListener("click", () => {
+  $("#shareCanvas").toBlob(async (blob) => {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      toast("Imagem copiada — é só colar (Ctrl+V)");
+    } catch (e) {
+      toast(`Não deu pra copiar: ${e?.message || e}`, 4000);
+    }
+  }, "image/png");
+});
+
+// ===================================================================
 // Atualizações (GitHub Releases)
 // ===================================================================
 let pendingUpdate = null;
@@ -2208,6 +2599,11 @@ applyBackground();
 render();
 
 api.listen("media-update", onMedia);
+if (!IS_WALLPAPER) {
+  api.listen("hp-control", (m) => m?.action && control(m.action));
+  api.listen("hp-mini-ready", () => publishNow(true));
+  api.listen("mini-mode", (on) => $("#btnMini")?.classList.toggle("on", !!on));
+}
 if (IS_WALLPAPER) {
   // Janela do wallpaper: recarrega quando o player muda alguma configuração.
   window.addEventListener("storage", (e) => {
@@ -2224,6 +2620,8 @@ if (!IS_WALLPAPER && settings.wallpaperMode) {
     renderSettings();
   });
 }
+
+if (!IS_WALLPAPER && settings.visualizer) api.invoke("set_visualizer", { on: true }).catch(() => {});
 
 if (!IS_WALLPAPER) {
   setTimeout(() => checkUpdate(false), 4000);

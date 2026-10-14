@@ -217,6 +217,11 @@ fn hide_to_tray(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn show_main_window(app: AppHandle) {
+    show_main(&app);
+}
+
+#[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0);
 }
@@ -356,6 +361,7 @@ fn main() {
             discord_clear,
             discord_status,
             hide_to_tray,
+            show_main_window,
             quit_app
         ])
         .build(tauri::generate_context!())
