@@ -75,6 +75,14 @@ async fn search_page(service: String, query: String, kind: String, cursor: Optio
         .map_err(|e| e.to_string())?
 }
 
+/// Importa uma playlist pelo link (Spotify, SoundCloud, YouTube).
+#[tauri::command]
+async fn import_playlist(url: String) -> Result<search::ImportedPlaylist, String> {
+    tauri::async_runtime::spawn_blocking(move || search::import_playlist(&url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Baixa o áudio de uma música do SoundCloud pra tocar dentro do app.
 /// Volta os bytes crus (ArrayBuffer no JS), sem passar por base64.
 #[tauri::command]
@@ -261,6 +269,7 @@ fn main() {
             set_wallpaper_mode,
             search_music,
             search_page,
+            import_playlist,
             soundcloud_audio,
             youtube_audio,
             check_update,

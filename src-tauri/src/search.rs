@@ -69,6 +69,133 @@ pub fn search_page(service: &str, query: &str, kind: &str, cursor: Option<&str>)
     }
 }
 
+// =====================================================================
+// Importar playlist por link (Spotify, SoundCloud, YouTube / YouTube Music)
+// =====================================================================
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedPlaylist {
+    /// "spotify" | "soundcloud" | "youtube"
+    pub source: String,
+    pub name: String,
+    pub cover: Option<String>,
+    /// link pra abrir no serviço (no Spotify: spotify:playlist:… abre o app)
+    pub open_url: String,
+    pub tracks: Vec<Track>,
+}
+
+/// Qual serviço e qual id/tipo um link aponta. Exposto pros testes.
+pub fn classify_link(url: &str) -> Option<(&'static str, String, String)> {
+    let u = url.trim();
+    let lower = u.to_lowercase();
+    if lower.starts_with("spotify:") {
+        let mut parts = u.split(':').skip(1);
+        let kind = parts.next()?.to_lowercase();
+        let id = parts.next()?.to_string();
+        return matches!(kind.as_str(), "playlist" | "album").then(|| ("spotify", kind, id));
+    }
+    if lower.contains("open.spotify.com/") {
+        let path = u.split("open.spotify.com/").nth(1)?.split(['?', '#']).next()?;
+        let segs: Vec<&str> = path.split('/').filter(|x| !x.is_empty() && !x.starts_with("intl-") && *x != "embed").collect();
+        let (kind, id) = (segs.first()?.to_lowercase(), segs.get(1)?.to_string());
+        return matches!(kind.as_str(), "playlist" | "album").then(|| ("spotify", kind, id));
+    }
+    if lower.contains("soundcloud.com/") && !lower.contains("api-v2.") {
+        return Some(("soundcloud", "set".into(), u.split(['?', '#']).next()?.to_string()));
+    }
+    if lower.contains("youtube.com/") || lower.contains("youtu.be/") {
+        let q = u.split('?').nth(1)?;
+        let list = q.split('&').find_map(|kv| kv.strip_prefix("list="))?;
+        let list = list.split('#').next()?.to_string();
+        return (!list.is_empty()).then(|| ("youtube", "playlist".into(), list));
+    }
+    None
+}
+
+pub fn import_playlist(url: &str) -> Result<ImportedPlaylist, String> {
+    let (svc, kind, id) = classify_link(url)
+        .ok_or("Esse link não parece de playlist do Spotify, SoundCloud ou YouTube")?;
+    match svc {
+        "spotify" => spotify::import(&kind, &id),
+        "soundcloud" => soundcloud::import(&id),
+        _ => ytmusic::import(&id),
+    }
+}
+
+// ---------- Spotify (página pública de "embed", sem login) ----------
+mod spotify {
+    use super::*;
+
+    pub fn import(kind: &str, id: &str) -> Result<ImportedPlaylist, String> {
+        let html = http_get(&format!("https://open.spotify.com/embed/{kind}/{id}"))
+            .map_err(|e| format!("Spotify: {}", err_text(e)))?;
+        let v = next_data(&html).ok_or("Spotify: não consegui ler a playlist (ela é pública?)")?;
+        parse(&v, kind, id).ok_or_else(|| "Spotify: a playlist veio vazia ou é privada".into())
+    }
+
+    /// O embed traz os dados num <script id="__NEXT_DATA__" type="application/json">.
+    pub(crate) fn next_data(html: &str) -> Option<Value> {
+        let i = html.find("id=\"__NEXT_DATA__\"")?;
+        let start = i + html[i..].find('>')? + 1;
+        let end = start + html[start..].find("</script>")?;
+        serde_json::from_str(&html[start..end]).ok()
+    }
+
+    fn find_entity(v: &Value) -> Option<&Value> {
+        match v {
+            Value::Object(m) => {
+                if m.get("trackList").map(|t| t.is_array()).unwrap_or(false) {
+                    return Some(v);
+                }
+                m.values().find_map(find_entity)
+            }
+            Value::Array(a) => a.iter().find_map(find_entity),
+            _ => None,
+        }
+    }
+
+    fn best_image(v: &Value) -> Option<String> {
+        let list = v["coverArt"]["sources"].as_array().or_else(|| v["images"].as_array())?;
+        list.iter()
+            .max_by_key(|x| x["width"].as_i64().or_else(|| x["maxWidth"].as_i64()).unwrap_or(0))
+            .and_then(|x| x["url"].as_str())
+            .map(String::from)
+    }
+
+    pub(crate) fn parse(v: &Value, kind: &str, id: &str) -> Option<ImportedPlaylist> {
+        let e = find_entity(v)?;
+        let cover = best_image(e);
+        let tracks: Vec<Track> = e["trackList"]
+            .as_array()?
+            .iter()
+            .filter_map(|t| {
+                let title = t["title"].as_str()?.trim().to_string();
+                let uri = t["uri"].as_str().unwrap_or("");
+                let tid = uri.strip_prefix("spotify:track:")?;
+                Some(Track {
+                    title,
+                    artist: t["subtitle"].as_str().unwrap_or("").replace('\u{a0}', " ").trim().to_string(),
+                    cover: None,
+                    url: format!("https://open.spotify.com/track/{tid}"),
+                    duration_ms: t["duration"].as_i64(),
+                    rank: 1,
+                })
+            })
+            .collect();
+        if tracks.is_empty() {
+            return None;
+        }
+        let name = e["name"].as_str().or_else(|| e["title"].as_str()).unwrap_or("Playlist do Spotify").to_string();
+        Some(ImportedPlaylist {
+            source: "spotify".into(),
+            name,
+            cover,
+            open_url: format!("spotify:{kind}:{id}"),
+            tracks,
+        })
+    }
+}
+
 pub fn search(service: &str, query: &str) -> Result<SearchResult, String> {
     let q = query.trim();
     if q.is_empty() {
@@ -318,6 +445,53 @@ mod soundcloud {
         Err("SoundCloud recusou o pedido".into())
     }
 
+    /// Playlist/álbum do SoundCloud pelo link (até 500 faixas).
+    pub fn import(url: &str) -> Result<ImportedPlaylist, String> {
+        let v = api_get(&format!("https://api-v2.soundcloud.com/resolve?url={}", enc(url)))?;
+        if v["kind"].as_str() != Some("playlist") {
+            return Err("Esse link do SoundCloud não é de uma playlist ou álbum".into());
+        }
+        let list = v["tracks"].as_array().cloned().unwrap_or_default();
+        // as primeiras vêm completas; o resto vem só com o id
+        let missing: Vec<String> = list
+            .iter()
+            .filter(|t| t["title"].as_str().is_none())
+            .filter_map(|t| t["id"].as_i64().map(|i| i.to_string()))
+            .take(500)
+            .collect();
+        let mut full: std::collections::HashMap<i64, Value> = std::collections::HashMap::new();
+        for chunk in missing.chunks(50) {
+            if let Ok(Value::Array(a)) = api_get(&format!("https://api-v2.soundcloud.com/tracks?ids={}", chunk.join("%2C"))) {
+                for t in a {
+                    if let Some(id) = t["id"].as_i64() {
+                        full.insert(id, t);
+                    }
+                }
+            }
+        }
+        let tracks: Vec<Track> = list
+            .iter()
+            .take(500)
+            .filter_map(|t| {
+                if t["title"].is_string() {
+                    track(t)
+                } else {
+                    t["id"].as_i64().and_then(|id| full.get(&id)).and_then(track)
+                }
+            })
+            .collect();
+        if tracks.is_empty() {
+            return Err("A playlist do SoundCloud veio vazia".into());
+        }
+        Ok(ImportedPlaylist {
+            source: "soundcloud".into(),
+            name: v["title"].as_str().unwrap_or("Playlist do SoundCloud").to_string(),
+            cover: big(v["artwork_url"].as_str()).or_else(|| tracks[0].cover.clone()),
+            open_url: v["permalink_url"].as_str().unwrap_or(url).to_string(),
+            tracks,
+        })
+    }
+
     /// Formatos tocáveis sem DRM, do melhor pro pior (os "encrypted-hls" ficam de fora).
     pub(super) fn playable_transcodings(track: &Value) -> Vec<&Value> {
         let Some(list) = track["media"]["transcodings"].as_array() else { return Vec::new() };
@@ -477,6 +651,11 @@ mod soundcloud {
     }
 
     #[cfg(test)]
+    pub(super) fn client_id_for_test() -> Option<String> {
+        client_id(false).ok()
+    }
+
+    #[cfg(test)]
     pub(super) fn hls_parts_for_test(base: &str, pl: &str) -> Vec<String> {
         hls_parts(base, pl)
     }
@@ -600,6 +779,81 @@ mod ytmusic {
             Value::Array(a) => a.iter().find_map(find_continuation),
             _ => None,
         }
+    }
+
+    /// Playlist do YouTube / YouTube Music pelo id (list=…), até 500 faixas.
+    pub fn import(list: &str) -> Result<ImportedPlaylist, String> {
+        let base = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false";
+        let browse_id = if list.starts_with("VL") { list.to_string() } else { format!("VL{list}") };
+        let first = post(base, &json!({ "context": context(), "browseId": browse_id }))?;
+        let mut out = SearchResult::default();
+        let mut seen = HashSet::new();
+        walk(&first, &mut out, &mut seen);
+        let (name, cover) = header_info(&first);
+        let mut next = find_continuation(&first);
+        let mut pages = 0;
+        while let Some(c) = next.take() {
+            pages += 1;
+            if pages > 10 || out.tracks.len() >= 500 {
+                break;
+            }
+            let before = out.tracks.len();
+            let Ok(v) = post(
+                &format!("{base}&ctoken={0}&continuation={0}&type=next", enc(&c)),
+                &json!({ "context": context(), "continuation": c }),
+            ) else { break };
+            walk(&v, &mut out, &mut seen);
+            if out.tracks.len() == before {
+                break;
+            }
+            next = find_continuation(&v);
+        }
+        if out.tracks.is_empty() {
+            return Err("A playlist do YouTube veio vazia (ela é pública?)".into());
+        }
+        out.tracks.truncate(500);
+        Ok(ImportedPlaylist {
+            source: "youtube".into(),
+            name: name.unwrap_or_else(|| "Playlist do YouTube".into()),
+            cover: cover.or_else(|| out.tracks[0].cover.clone()),
+            open_url: format!("https://music.youtube.com/playlist?list={}", list.trim_start_matches("VL")),
+            tracks: out.tracks,
+        })
+    }
+
+    /// Nome e capa no cabeçalho da playlist (o nome do bloco muda entre versões do site).
+    fn header_info(v: &Value) -> (Option<String>, Option<String>) {
+        fn find<'a>(v: &'a Value) -> Option<&'a Value> {
+            match v {
+                Value::Object(m) => {
+                    for k in ["musicResponsiveHeaderRenderer", "musicDetailHeaderRenderer", "musicEditablePlaylistDetailHeaderRenderer", "musicImmersiveHeaderRenderer"] {
+                        if let Some(h) = m.get(k) {
+                            return Some(h);
+                        }
+                    }
+                    m.values().find_map(find)
+                }
+                Value::Array(a) => a.iter().find_map(find),
+                _ => None,
+            }
+        }
+        fn thumbs(v: &Value) -> Option<String> {
+            match v {
+                Value::Object(m) => {
+                    if let Some(list) = m.get("thumbnails").and_then(|t| t.as_array()) {
+                        if let Some(u) = list.last().and_then(|x| x["url"].as_str()) {
+                            return Some(upscale(u));
+                        }
+                    }
+                    m.values().find_map(thumbs)
+                }
+                Value::Array(a) => a.iter().find_map(thumbs),
+                _ => None,
+            }
+        }
+        let Some(h) = find(v) else { return (None, None) };
+        let name = Some(text_of(&h["title"])).filter(|t| !t.is_empty());
+        (name, thumbs(&h["thumbnail"]).or_else(|| thumbs(h)))
     }
 
     pub fn search(q: &str) -> Result<SearchResult, String> {
@@ -946,6 +1200,66 @@ mod tests {
         assert!(!r.tracks.is_empty());
         assert!(r.tracks[0].url.starts_with("https://soundcloud.com/"));
         assert!(!r.artists.is_empty());
+    }
+
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_importar_playlists() {
+        // Spotify: "Today's Top Hits" (pública, do próprio Spotify)
+        match import_playlist("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M") {
+            Ok(p) => println!("Importar spotify: '{}' com {} faixas, capa={}, 1ª: {} — {}", p.name, p.tracks.len(), p.cover.is_some(),
+                p.tracks[0].title, p.tracks[0].artist),
+            Err(e) => panic!("Importar spotify falhou: {e}"),
+        }
+        // YouTube Music: playlist pública
+        match import_playlist("https://music.youtube.com/playlist?list=PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i") {
+            Ok(p) => println!("Importar youtube: '{}' com {} faixas, capa={}, 1ª: {} — {}", p.name, p.tracks.len(), p.cover.is_some(),
+                p.tracks[0].title, p.tracks[0].artist),
+            Err(e) => panic!("Importar youtube falhou: {e}"),
+        }
+        // SoundCloud: pega uma playlist qualquer da busca e importa
+        let found = soundcloud_any_playlist().expect("não achei playlist no SoundCloud pra testar");
+        match import_playlist(&found) {
+            Ok(p) => println!("Importar soundcloud: '{}' com {} faixas ({found})", p.name, p.tracks.len()),
+            Err(e) => panic!("Importar soundcloud falhou: {e} ({found})"),
+        }
+    }
+
+    fn soundcloud_any_playlist() -> Option<String> {
+        let id = soundcloud::client_id_for_test()?;
+        let t = http_get(&format!("https://api-v2.soundcloud.com/search/playlists?q=juice%20wrld&limit=5&client_id={id}")).ok()?;
+        let v: Value = serde_json::from_str(&t).ok()?;
+        v["collection"].as_array()?.iter().find(|p| p["track_count"].as_i64().unwrap_or(0) > 10)
+            .and_then(|p| p["permalink_url"].as_str()).map(String::from)
+    }
+
+    #[test]
+    fn reconhece_links_de_playlist() {
+        assert_eq!(classify_link("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc"),
+            Some(("spotify", "playlist".into(), "37i9dQZF1DXcBWIGoYBM5M".into())));
+        assert_eq!(classify_link("https://open.spotify.com/intl-pt/album/4yP0hdKOZPNshxUOjY0cZj").map(|x| x.1), Some("album".into()));
+        assert_eq!(classify_link("spotify:playlist:abc").map(|x| x.2), Some("abc".into()));
+        assert_eq!(classify_link("https://open.spotify.com/track/xyz"), None);
+        assert_eq!(classify_link("https://music.youtube.com/playlist?list=PLabc&si=1").map(|x| x.2), Some("PLabc".into()));
+        assert_eq!(classify_link("https://www.youtube.com/watch?v=x&list=PLz").map(|x| x.2), Some("PLz".into()));
+        assert_eq!(classify_link("https://soundcloud.com/user/sets/minha?si=1").map(|x| x.2), Some("https://soundcloud.com/user/sets/minha".into()));
+        assert_eq!(classify_link("bom dia"), None);
+    }
+
+    #[test]
+    fn le_embed_do_spotify() {
+        let html = r#"<html><script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{
+            "name":"Minha playlist","coverArt":{"sources":[{"url":"https://i.scdn.co/a","width":300},{"url":"https://i.scdn.co/b","width":640}]},
+            "trackList":[{"uri":"spotify:track:111","title":"Lucid Dreams","subtitle":"Juice WRLD","duration":239836},
+                         {"uri":"spotify:episode:9","title":"podcast","subtitle":"x"}]}}}}}}</script></html>"#;
+        let v = spotify::next_data(html).unwrap();
+        let p = spotify::parse(&v, "playlist", "abc").unwrap();
+        assert_eq!(p.name, "Minha playlist");
+        assert_eq!(p.cover.as_deref(), Some("https://i.scdn.co/b"));
+        assert_eq!(p.tracks.len(), 1);
+        assert_eq!(p.tracks[0].url, "https://open.spotify.com/track/111");
+        assert_eq!(p.tracks[0].duration_ms, Some(239836));
+        assert_eq!(p.open_url, "spotify:playlist:abc");
     }
 
     #[test]
