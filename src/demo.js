@@ -131,6 +131,17 @@ export function createDemoApi() {
             next: page < 3 ? String(page + 1) : null,
           };
         }
+        case "import_playlist": {
+          await new Promise((r) => setTimeout(r, 900));
+          const sp = args.url.includes("spotify");
+          return {
+            source: sp ? "spotify" : args.url.includes("soundcloud") ? "soundcloud" : "youtube",
+            name: sp ? "Noites de Neon" : "Mix importado",
+            cover: TRACKS[0].thumb,
+            openUrl: sp ? "spotify:playlist:demo" : args.url,
+            tracks: TRACKS.map((t, i) => ({ title: t.title, artist: t.artist, cover: sp ? null : t.thumb, url: sp ? `https://open.spotify.com/track/demo${i}` : `https://soundcloud.com/demo/${i}`, durationMs: t.durationMs })),
+          };
+        }
         case "get_volume":
           return { level: demoVol, target: "Spotify" };
         case "set_volume":

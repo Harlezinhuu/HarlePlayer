@@ -25,6 +25,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Toca SoundCloud e YouTube Music dentro do app**, sem abrir navegador. O áudio do SoundCloud é baixado e tocado aqui. O YouTube toca pelo player oficial, escondido, e se o vídeo bloquear, o áudio vem pelo [yt-dlp](https://github.com/yt-dlp/yt-dlp), baixado e atualizado sozinho.
 - **Fila no estilo Spotify**: *Tocar a seguir* e *Adicionar à fila* pelo menu **⋯** ou pelo clique direito, arrastar pra reordenar, embaralhar, repetir (a fila ou uma música) e limpar.
 - **Playlists**: crie, renomeie, reordene e toque em ordem ou embaralhado, com músicas do SoundCloud e do YouTube Music.
+- **Importar playlist pelo link** (ou colando o link na busca): **Spotify**, **SoundCloud** e **YouTube / YouTube Music**, sem login. As do Spotify abrem no app do Spotify com um clique, então **contam pro Wrapped**. As do SoundCloud e do YouTube tocam aqui dentro.
 - **Volume**: do player interno, ou só do app que está tocando (o Spotify, por exemplo), pelo mixer do Windows, sem mexer no volume do PC inteiro.
 - Teclas de mídia, tocar/pausar, próxima, anterior e barra de progresso clicável.
 
@@ -133,7 +134,6 @@ A fila guarda quais músicas foram adicionadas por você: elas entram logo depoi
 ## 🗺️ Próximos passos
 
 - [ ] Iniciar junto com o Windows
-- [ ] Importar playlists do SoundCloud e do YouTube Music
 - [ ] Wallpaper em vários monitores
 - [ ] Wallpapers que reagem ao som (visualizador)
 - [ ] Temas e posição dos elementos personalizáveis

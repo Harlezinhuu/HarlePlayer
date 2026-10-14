@@ -626,3 +626,16 @@ body.ui-idle #queue { opacity: 0; transform: translateX(-24px); pointer-events: 
 body.ui-idle #titlebar, body.ui-idle #updateBar, body.ui-idle #toast { opacity: 0; pointer-events: none; }
 /* sem o painel, o carrossel ocupa o centro */
 body.ui-idle #stage { transform: translateX(calc(-0.5 * (clamp(230px, 19vw, 300px) + 2vw))) scale(1.06); }
+
+/* ---------- playlists importadas ---------- */
+.src-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+.q-tool:disabled, .pl-name:disabled { opacity: .55; }
+#historyList li.sp-open { flex-direction: column; align-items: stretch; gap: 6px; cursor: default; padding: 4px 4px 10px; }
+#historyList li.sp-open:hover { background: transparent; }
+#historyList li.sp-open small { text-align: center; font-size: 10.5px; color: var(--muted); }
+.btn-spotify {
+  height: 38px; border: 0; border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: #1ed760; color: #04140a; font-size: 13px; font-weight: 800; transition: transform .15s, filter .15s;
+}
+.btn-spotify:hover { filter: brightness(1.08); transform: scale(1.02); }
+.btn-spotify svg { width: 15px; height: 15px; fill: currentColor; stroke: none; }
