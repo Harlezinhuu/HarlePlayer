@@ -3,9 +3,11 @@
 
 mod detect;
 mod discord;
+mod hotkeys;
 mod media;
 mod mini;
 mod net;
+mod notify;
 mod remote;
 mod search;
 mod updater;
@@ -223,6 +225,23 @@ fn remote_lyrics(lyrics: serde_json::Value) {
     remote::set_lyrics(&lyrics);
 }
 
+/// Liga/desliga os atalhos globais; devolve os que outro programa já usa.
+#[tauri::command]
+fn set_hotkeys(app: AppHandle, on: bool) -> Result<Vec<String>, String> {
+    hotkeys::set(&app, on)
+}
+
+/// Mostra o aviso de música nova no canto da tela.
+#[tauri::command]
+fn notify_show(app: AppHandle, payload: serde_json::Value) -> Result<(), String> {
+    notify::show(&app, payload)
+}
+
+#[tauri::command]
+fn notify_last() -> Option<serde_json::Value> {
+    notify::last()
+}
+
 /// Atualiza o "Ouvindo …" no perfil do Discord.
 #[tauri::command]
 fn discord_set(presence: discord::Presence) {
@@ -379,6 +398,9 @@ fn main() {
             youtube_audio,
             check_update,
             install_update,
+            set_hotkeys,
+            notify_show,
+            notify_last,
             remote_start,
             remote_stop,
             remote_new_code,
