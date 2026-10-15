@@ -606,7 +606,7 @@ function renderQueue(force = false) {
   const curKey = keyOf(media);
   const info = player?.active && local ? player.queue.info() : null;
   const pl = openPlaylistId ? playlists.find((p) => p.id === openPlaylistId) : null;
-  const sig = JSON.stringify([tab, curKey, media.playing, info && [info.index, info.repeat, info.tracks.map((t) => t.qid + (t.user ? "u" : "") + (t.url ? "" : "?"))],
+  const sig = JSON.stringify([tab, curKey, media.playing, info && [info.index, info.repeat, info.shuffle, info.tracks.map((t) => t.qid + (t.user ? "u" : "") + (t.url ? "" : "?"))],
     tab === "recentes" && history.map((h) => h.key + !!h.thumb), tab === "playlists" && (pl ? [pl.id, pl.name, pl.tracks.length, pl.tracks.map((t) => t.title)] : playlists.map((p) => [p.id, p.name, p.tracks.length])), creatingPlaylist, importingPlaylist, importBusy]);
   // (sem "force", não redesenha enquanto a pessoa digita no nome da playlist)
   if (dragging || (!force && (sig === queueSig || document.activeElement?.closest?.("#queue input")))) return;
@@ -630,7 +630,7 @@ function renderQueue(force = false) {
     if (info) {
       const rep = info.repeat;
       tools.innerHTML = `
-        <button class="q-tool" data-act="shuffle" title="Embaralhar as próximas">${ICON.shuffle}</button>
+        <button class="q-tool ${info.shuffle ? "on" : ""}" data-act="shuffle" title="Aleatório: ${info.shuffle ? "ligado" : "desligado"}">${ICON.shuffle}</button>
         <button class="q-tool ${rep !== "off" ? "on" : ""}" data-act="repeat" title="Repetir: ${rep === "one" ? "esta música" : rep === "all" ? "a fila" : "desligado"}">${ICON.repeat}${rep === "one" ? "<i>1</i>" : ""}</button>
         <span class="q-spacer"></span>
         <button class="q-tool txt" data-act="clear" title="Tirar todas as próximas">Limpar</button>`;
@@ -743,14 +743,8 @@ $("#qTools").addEventListener("click", (e) => {
   const q = player?.queue;
   const pl = playlists.find((p) => p.id === openPlaylistId);
   switch (b.dataset.act) {
-    case "shuffle": q?.shuffle(); toast("Próximas embaralhadas"); break;
-    case "repeat": {
-      const r = q?.info().repeat;
-      const nx = r === "off" ? "all" : r === "all" ? "one" : "off";
-      q?.setRepeat(nx);
-      toast(nx === "all" ? "Repetir a fila" : nx === "one" ? "Repetir esta música" : "Repetir desligado");
-      break;
-    }
+    case "shuffle": setShuffleMode(!playModes().shuffle); return;
+    case "repeat": setRepeatMode(nextRepeat(playModes().repeat)); return;
     case "clear": q?.clearUpcoming(); break;
     case "back": openPlaylistId = null; break;
     case "plplay": if (pl) playPlaylist(pl, 0); return;
@@ -1146,8 +1140,64 @@ function renderMini() {
   if (cover) nc.src = cover;
   else nc.removeAttribute("src");
   document.body.classList.toggle("playing", !!(media.available && media.playing));
+  renderModes();
   publishNow();
 }
+
+// ---------- aleatório / repetir: player interno ou o app de origem (se ele deixar) ----------
+function playModes() {
+  if (player?.active && local) {
+    const i = player.queue.info();
+    return { local: true, repeat: i.repeat, shuffle: i.shuffle, canRepeat: true, canShuffle: true };
+  }
+  const has = !!keyOf(media);
+  return {
+    local: false,
+    repeat: media.repeat || "off",
+    shuffle: !!media.shuffle,
+    canRepeat: has && media.repeat != null,
+    canShuffle: has && media.shuffle != null,
+  };
+}
+function renderModes() {
+  const m = playModes();
+  const app = serviceName(playingService()) || "app";
+  const sb = $("#btnShuffle"), rb = $("#btnRepeat");
+  sb.disabled = !m.canShuffle;
+  sb.classList.toggle("on", m.canShuffle && m.shuffle);
+  sb.title = m.canShuffle ? `Aleatório: ${m.shuffle ? "ligado" : "desligado"}` : `O ${app} não deixa mudar o aleatório daqui`;
+  rb.disabled = !m.canRepeat;
+  rb.classList.toggle("on", m.canRepeat && m.repeat !== "off");
+  rb.classList.toggle("one", m.canRepeat && m.repeat === "one");
+  rb.title = m.canRepeat ? `Repetir: ${m.repeat === "one" ? "esta música" : m.repeat === "all" ? (m.local ? "a fila" : "a playlist") : "desligado"}` : `O ${app} não deixa mudar o repetir daqui`;
+}
+function setShuffleMode(on) {
+  const m = playModes();
+  if (!m.canShuffle) return;
+  if (m.local) player.queue.setShuffle(on);
+  else {
+    media = { ...media, shuffle: on }; // mostra na hora; o Windows confirma em seguida
+    api.invoke("media_control", { action: on ? "shuffle:on" : "shuffle:off" }).catch((e) => toast(String(e)));
+  }
+  renderModes();
+  renderQueue(true);
+  toast(on ? "Aleatório ligado" : "Aleatório desligado");
+}
+function setRepeatMode(r) {
+  const m = playModes();
+  if (!m.canRepeat) return;
+  if (m.local) player.queue.setRepeat(r);
+  else {
+    media = { ...media, repeat: r };
+    api.invoke("media_control", { action: `repeat:${r}` }).catch((e) => toast(String(e)));
+  }
+  renderModes();
+  renderQueue(true);
+  toast(r === "all" ? (m.local ? "Repetir a fila" : "Repetir a playlist") : r === "one" ? "Repetir esta música" : "Repetir desligado");
+}
+const nextRepeat = (r) => (r === "off" ? "all" : r === "all" ? "one" : "off");
+$("#btnShuffle").addEventListener("click", () => setShuffleMode(!playModes().shuffle));
+$("#btnRepeat").addEventListener("click", () => setRepeatMode(nextRepeat(playModes().repeat)));
 
 // ---------- mini player: manda o que está tocando pra janelinha ----------
 let lastNowSig = "";
@@ -2573,6 +2623,10 @@ function remoteCommand(m) {
       return pushRemote(true);
     case "jump":
       return player?.queue.jump(+m.value);
+    case "shuffle":
+      return setShuffleMode(!!m.value);
+    case "repeat":
+      return ["off", "all", "one"].includes(m.value) && setRepeatMode(m.value);
     case "play": case "playnext": case "queue": {
       if (!player || !t?.url) return;
       const tr = toTrack(t, t.service === "soundcloud" ? "soundcloud" : "ytmusic");
@@ -2601,6 +2655,7 @@ function pushRemote(force = false) {
     serviceName: curKey ? serviceName(playingService()) : "",
     lyricsOffset: settings.lyricsOffset || 0,
     local: !!info,
+    modes: playModes(),
     volume: isLocalVol() ? { level: settings.volume, target: "Harle Player" } : remoteVol,
     queue: info
       ? info.tracks.map((t, i) => ({ i, title: t.title, artist: t.artist, cover: /^https:/.test(t.cover || "") ? t.cover : null })).slice(info.index + 1, info.index + 41)

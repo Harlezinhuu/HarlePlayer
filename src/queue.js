@@ -73,3 +73,17 @@ export function markPlayed(q, i) {
   tracks[i] = { ...tracks[i], user: false };
   return { tracks, index: q.index };
 }
+
+/** Desfaz o embaralhar: as próximas voltam pra ordem guardada (lista de qids);
+ *  o que entrou depois de embaralhar fica no fim, na ordem atual. */
+export function unshuffle(q, order) {
+  const pos = new Map(order.map((qid, i) => [qid, i]));
+  const head = q.tracks.slice(0, q.index + 1);
+  let i = q.index + 1;
+  const user = [];
+  while (i < q.tracks.length && q.tracks[i].user) user.push(q.tracks[i++]);
+  const rest = q.tracks.slice(i);
+  const known = rest.filter((t) => pos.has(t.qid)).sort((a, b) => pos.get(a.qid) - pos.get(b.qid));
+  const added = rest.filter((t) => !pos.has(t.qid));
+  return { tracks: [...head, ...user, ...known, ...added], index: q.index };
+}

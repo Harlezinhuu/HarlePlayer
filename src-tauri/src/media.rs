@@ -23,6 +23,10 @@ pub struct MediaState {
     pub thumb: Option<String>,
     /// Serviço detectado: soundcloud, ytmusic, youtube, spotify, apple, deezer, browser, other
     pub service: String,
+    /// Repetir do app de origem: "off" | "all" | "one"; None = o app não deixa controlar
+    pub repeat: Option<String>,
+    /// Aleatório do app de origem; None = o app não deixa controlar
+    pub shuffle: Option<bool>,
 }
 
 pub fn start_watcher(app: tauri::AppHandle) {
@@ -69,6 +73,7 @@ mod imp {
         GlobalSystemMediaTransportControlsSessionManager as Manager,
         GlobalSystemMediaTransportControlsSessionPlaybackStatus as Status,
     };
+    use windows::Media::MediaPlaybackAutoRepeatMode as RepeatMode;
     use windows::Storage::Streams::{DataReader, IInputStream};
 
     /// Diferença entre a época do Windows (1601) e a do Unix (1970), em ticks de 100ns.
@@ -113,8 +118,36 @@ mod imp {
         current
     }
 
+    /// Repetir/aleatório, só se o app disser que aceita ser controlado.
+    fn read_modes(s: &Session) -> (Option<String>, Option<bool>) {
+        let Ok(info) = s.GetPlaybackInfo() else { return (None, None) };
+        let ctrls = info.Controls().ok();
+        let can_repeat = ctrls.as_ref().and_then(|c| c.IsRepeatEnabled().ok()).unwrap_or(false);
+        let can_shuffle = ctrls.as_ref().and_then(|c| c.IsShuffleEnabled().ok()).unwrap_or(false);
+        let repeat = if can_repeat {
+            let mode = info.AutoRepeatMode().ok().and_then(|r| r.Value().ok());
+            Some(
+                match mode {
+                    Some(RepeatMode::Track) => "one",
+                    Some(RepeatMode::List) => "all",
+                    _ => "off",
+                }
+                .to_string(),
+            )
+        } else {
+            None
+        };
+        let shuffle = if can_shuffle {
+            Some(info.IsShuffleActive().ok().and_then(|r| r.Value().ok()).unwrap_or(false))
+        } else {
+            None
+        };
+        (repeat, shuffle)
+    }
+
     fn read_state(s: &Session) -> WinResult<MediaState> {
         let props = s.TryGetMediaPropertiesAsync()?.get()?;
+        let (repeat, shuffle) = read_modes(s);
         let tl = s.GetTimelineProperties()?;
         let playing = is_playing(s);
 
@@ -140,6 +173,8 @@ mod imp {
             updated_at_ms,
             thumb: None,
             service: String::new(),
+            repeat,
+            shuffle,
         })
     }
 
@@ -276,6 +311,11 @@ mod imp {
                 s.TryChangePlaybackPositionAsync(ms * 10_000)
                     .and_then(|op| op.get())
             }
+            "repeat:off" => s.TryChangeAutoRepeatModeAsync(RepeatMode::None).and_then(|op| op.get()),
+            "repeat:all" => s.TryChangeAutoRepeatModeAsync(RepeatMode::List).and_then(|op| op.get()),
+            "repeat:one" => s.TryChangeAutoRepeatModeAsync(RepeatMode::Track).and_then(|op| op.get()),
+            "shuffle:on" => s.TryChangeShuffleActiveAsync(true).and_then(|op| op.get()),
+            "shuffle:off" => s.TryChangeShuffleActiveAsync(false).and_then(|op| op.get()),
             other => return Err(format!("Ação desconhecida: {other}")),
         };
         match result {

@@ -719,3 +719,13 @@ body.mode-wallpaper #wrapped, body.mode-wallpaper #shareModal { display: none !i
 .remote-box a { font-size: 12px; color: rgb(var(--accent)); }
 .remote-box > div { min-width: 0; flex: 1; }
 .remote-box p { overflow-wrap: anywhere; }
+
+/* ---------- aleatório / repetir ---------- */
+.t-btn.mode { position: relative; width: 34px; height: 34px; opacity: .6; }
+.t-btn.mode svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.t-btn.mode:hover { opacity: 1; }
+.t-btn.mode.on { opacity: 1; color: rgb(var(--accent)); }
+.t-btn.mode.on::after { content: ""; position: absolute; bottom: 1px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
+.t-btn.mode:disabled { opacity: .22; cursor: default; background: transparent; }
+.t-btn.mode .one { display: none; position: absolute; top: 4px; right: 3px; font-style: normal; font-size: 8.5px; font-weight: 800; }
+.t-btn.mode.one .one { display: block; }

@@ -65,7 +65,7 @@ export function createDemoApi() {
   let idx = 0;
   let state = {
     available: true, ...TRACKS[0], source: "Chrome", service: "soundcloud", playing: true,
-    positionMs: 13000, updatedAtMs: Date.now(),
+    positionMs: 13000, updatedAtMs: Date.now(), repeat: "off", shuffle: false,
   };
   const emit = () => (listeners["media-update"] || []).forEach((cb) => cb({ ...state }));
   const pos = () => state.positionMs + (state.playing ? Date.now() - state.updatedAtMs : 0);
@@ -99,6 +99,8 @@ export function createDemoApi() {
           if (args.action === "next") go(idx + 1);
           if (args.action === "prev") go(idx - 1);
           if (args.action === "seek") state = { ...state, positionMs: args.positionMs, updatedAtMs: Date.now() };
+          if (args.action.startsWith("repeat:")) state = { ...state, repeat: args.action.slice(7) };
+          if (args.action.startsWith("shuffle:")) state = { ...state, shuffle: args.action === "shuffle:on" };
           emit();
           return;
         case "http_get": {

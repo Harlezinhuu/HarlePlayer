@@ -52,3 +52,14 @@ test("próxima respeita repetir", () => {
   assert.equal(Q.nextIndex(q, "one", false), -1); // apertar "próxima" pula mesmo no repetir 1
   assert.equal(Q.nextIndex({ tracks: [], index: -1 }), -1);
 });
+
+test("desligar o aleatório volta a ordem original", () => {
+  const q0 = { tracks: T("a", "b", "c", "d", "e"), index: 0 };
+  const order = q0.tracks.map((t) => t.qid);
+  const s = Q.shuffleUpcoming(q0, () => 0.3);
+  const back = Q.unshuffle(s, order);
+  assert.equal(titles(back), "a,b,c,d,e");
+  // uma música adicionada no meio do caminho vai pro fim
+  const withNew = { tracks: [...s.tracks, ...T("z")], index: 0 };
+  assert.equal(titles(Q.unshuffle(withNew, order)), "a,b,c,d,e,z");
+});

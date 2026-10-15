@@ -42,6 +42,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   let objectUrl = null;
   let volume = 1;
   let repeat = "off"; // "off" | "all" | "one"
+  let shuffleOrder = null; // ordem antes de embaralhar (null = aleatório desligado)
   const q = () => ({ tracks: queue, index });
   const setQ = (n) => {
     queue = n.tracks;
@@ -50,7 +51,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     onQueue(queueInfo());
   };
   function queueInfo() {
-    return { tracks: queue, index, repeat };
+    return { tracks: queue, index, repeat, shuffle: !!shuffleOrder };
   }
 
   // ---------- estado ----------
@@ -268,7 +269,13 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   function playQueue(tracks, start = 0) {
     queue = tracks.map((t) => Q.withQid(t));
     index = -1;
-    return playIndex(start);
+    const p = playIndex(start);
+    // aleatório ligado: a lista nova já entra embaralhada (a escolhida toca primeiro)
+    if (shuffleOrder) {
+      shuffleOrder = queue.map((t) => t.qid);
+      setQ(Q.shuffleUpcoming(q()));
+    }
+    return p;
   }
 
   // ---------- fila estilo Spotify ----------
@@ -294,6 +301,18 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     },
     shuffle() {
       setQ(Q.shuffleUpcoming(q()));
+    },
+    /** Liga/desliga o aleatório (desligando, a ordem original volta). */
+    setShuffle(on) {
+      if (on && !shuffleOrder) {
+        shuffleOrder = queue.map((t) => t.qid);
+        setQ(Q.shuffleUpcoming(q()));
+      } else if (!on && shuffleOrder) {
+        const order = shuffleOrder;
+        shuffleOrder = null;
+        setQ(Q.unshuffle(q(), order));
+      }
+      emit();
     },
     clearUpcoming() {
       setQ({ tracks: queue.slice(0, index + 1), index });
