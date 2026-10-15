@@ -53,6 +53,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 
 ### 🔌 Integrações
 - **Discord Rich Presence**: "Ouvindo SoundCloud" (ou YouTube Music, YouTube…) no seu perfil, com capa, artista, barra de tempo e botão "Ouvir no …". Detecta sozinho onde a música está tocando, até no navegador.
+- **Controle pelo celular**: liga nas configurações, aponta a câmera pro QR code e o celular vira um controle (tocar, pular, volume, letra rolando, fila e busca), sem instalar nada. Funciona em Android e iPhone, na mesma rede Wi-Fi. O acesso é protegido por um código que só o QR tem.
 - **Se atualiza sozinho**: avisa quando sai versão nova nas Releases, baixa, instala e abre de novo com um clique.
 - Fica na **bandeja do sistema** quando você fecha.
 
@@ -126,10 +127,11 @@ O `npm run demo` abre o front no navegador com músicas, letra e busca de exempl
 │ stats.js   retrospectiva (puras)     │        │ ytdlp.rs     reserva do YouTube                       │
 │ lib.js     letra, cores, títulos     │        │ volume.rs    volume por app (WASAPI)                  │
 │ mini.js    mini player               │        │ visualizer.rs graves do som do PC (WASAPI)            │
-│                                      │        │ discord.rs   Rich Presence (named pipe)               │
-│ 3 janelas: player, wallpaper, mini   │        │ wallpaper.rs janela na camada WorkerW                 │
-└──────────────────────────────────────┘        │ mini.rs      janelinha sempre por cima                │
-                                                │ updater.rs   Releases do GitHub → instala e reabre    │
+│ remote.html controle pelo celular    │        │ discord.rs   Rich Presence (named pipe)               │
+│ qr.js      QR code (sem biblioteca)  │        │ wallpaper.rs janela na camada WorkerW                 │
+│                                      │        │ mini.rs      janelinha sempre por cima                │
+│ 3 janelas: player, wallpaper, mini   │        │ remote.rs    servidor HTTP na rede local (celular)    │
+└──────────────────────────────────────┘        │ updater.rs   Releases do GitHub → instala e reabre    │
                                                 └───────────────────────────────────────────────────────┘
 ```
 

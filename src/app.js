@@ -4,6 +4,7 @@
 
 import { createPlayer } from "./player.js";
 import * as Stats from "./stats.js";
+import { drawQr } from "./qr.js";
 import { fmt, esc, rgbToHsl, hslToRgb, slotOf, cleanTitle, cleanArtist, lyricVariants, parseLrc, isPlaceholderTitle } from "./lib.js";
 
 const $ = (s) => document.querySelector(s);
@@ -54,6 +55,7 @@ const DEFAULTS = {
   volume: 0.8, // volume do player interno (0–1)
   queueTab: "fila", // "fila" | "recentes" | "playlists"
   visualizer: true, // fundo/relógio/capa reagem ao grave
+  remote: false, // controle pelo celular (servidor na rede local)
   clock24: true,
   clockStyle: "solid", // solid | thin | outline
   wallpaperMode: false, // wallpaper animado atrás dos ícones
@@ -1170,6 +1172,7 @@ function publishNow(full = false) {
   if (full || cover !== lastNowCover) msg.cover = cover;
   lastNowCover = cover;
   api.emit("hp-now", msg).catch?.(() => {});
+  pushRemote();
 }
 
 $("#progress").addEventListener("click", (e) => {
@@ -1196,6 +1199,7 @@ $("#btnPrev").addEventListener("click", () => control("prev"));
 async function loadLyrics(s) {
   const key = keyOf(s);
   lyrics = null;
+  pushRemoteLyrics();
   if (!key) return;
   for (const v of lyricVariants(s)) {
     if (!v.title) continue;
@@ -1215,9 +1219,11 @@ async function loadLyrics(s) {
     if (keyOf(media) !== key) return; // trocou de música no meio
     if (res?.syncedLyrics) {
       lyrics = { key, lines: parseLrc(res.syncedLyrics) };
+      pushRemoteLyrics();
       return;
     }
   }
+  pushRemoteLyrics();
 }
 
 // ---------- modo "verso inteiro": a frase toda, acendendo palavra por palavra ----------
@@ -2545,6 +2551,125 @@ $("#shareCopy").addEventListener("click", () => {
 });
 
 // ===================================================================
+// Controle pelo celular: o PC vira um servidorzinho na rede Wi-Fi
+// ===================================================================
+let remoteInfo = null;
+let remoteCoverSent = null;
+let remoteVol = { level: settings.volume, target: "Volume" };
+
+/** Comandos que chegam do mini player e do celular. */
+function remoteCommand(m) {
+  const t = m.track;
+  switch (m.action) {
+    case "toggle": case "next": case "prev":
+      return control(m.action);
+    case "seek":
+      return Number.isFinite(m.value) && control("seek", Math.round(m.value));
+    case "volume":
+      if (!Number.isFinite(m.value)) return;
+      vol.source = isLocalVol() ? null : media.available ? media.source || "" : "";
+      setVolumeLevel(m.value);
+      remoteVol = { level: vol.level, target: remoteVol.target };
+      return pushRemote(true);
+    case "jump":
+      return player?.queue.jump(+m.value);
+    case "play": case "playnext": case "queue": {
+      if (!player || !t?.url) return;
+      const tr = toTrack(t, t.service === "soundcloud" ? "soundcloud" : "ytmusic");
+      if (m.action === "play") player.playQueue([tr], 0);
+      else if (m.action === "playnext") player.queue.playNext(tr);
+      else player.queue.add(tr);
+      return renderQueue(true);
+    }
+  }
+}
+
+function pushRemote(force = false) {
+  if (!settings.remote || !remoteInfo || IS_WALLPAPER) return;
+  const curKey = keyOf(media);
+  const h = curKey ? history.find((x) => x.key === curKey) : null;
+  const info = player?.active && local ? player.queue.info() : null;
+  const cover = curKey ? media.coverUrl || media.thumb || h?.thumb || "" : "";
+  const now = {
+    key: curKey,
+    title: curKey ? media.title : "",
+    artist: curKey ? media.artist || media.album || "" : "",
+    playing: !!(media.available && media.playing),
+    positionMs: Math.round(positionNow()),
+    durationMs: media.durationMs || 0,
+    accent: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
+    serviceName: curKey ? serviceName(playingService()) : "",
+    lyricsOffset: settings.lyricsOffset || 0,
+    local: !!info,
+    volume: isLocalVol() ? { level: settings.volume, target: "Harle Player" } : remoteVol,
+    queue: info
+      ? info.tracks.map((t, i) => ({ i, title: t.title, artist: t.artist, cover: /^https:/.test(t.cover || "") ? t.cover : null })).slice(info.index + 1, info.index + 41)
+      : [],
+  };
+  if (force || cover !== remoteCoverSent) {
+    now.cover = cover;
+    remoteCoverSent = cover;
+  }
+  api.invoke("remote_update", { now }).catch(() => {});
+}
+function pushRemoteLyrics() {
+  if (!settings.remote || !remoteInfo || IS_WALLPAPER) return;
+  const l = lyrics ? { key: lyrics.key, lines: lyrics.lines.map((x) => ({ t: x.t, text: x.text })) } : { key: keyOf(media), lines: [] };
+  api.invoke("remote_lyrics", { lyrics: l }).catch(() => {});
+}
+// posição fresquinha a cada 1 s, e o volume do app de fora a cada 5 s
+setInterval(() => pushRemote(), 1000);
+setInterval(async () => {
+  if (!settings.remote || !remoteInfo || isLocalVol()) return;
+  try {
+    const v = await api.invoke("get_volume", { source: media.available ? media.source || "" : "" });
+    if (v) remoteVol = { level: v.level, target: v.target === "Sistema" ? "PC" : v.target };
+  } catch {}
+}, 5000);
+
+async function setRemote(on, quiet = false) {
+  settings.remote = on;
+  saveSettings();
+  if (on) {
+    try {
+      remoteInfo = await api.invoke("remote_start");
+      if (!remoteInfo) remoteInfo = { url: `${location.origin}/remote.html?k=demo`, demo: true };
+      remoteCoverSent = null;
+      pushRemote(true);
+      pushRemoteLyrics();
+    } catch (e) {
+      remoteInfo = null;
+      settings.remote = false;
+      saveSettings();
+      if (!quiet) toast(`Não deu pra ligar o controle: ${e}`, 4000);
+    }
+  } else {
+    remoteInfo = null;
+    api.invoke("remote_stop").catch(() => {});
+  }
+  renderRemote();
+}
+function renderRemote() {
+  $("#swRemote").classList.toggle("on", !!settings.remote);
+  const box = $("#remoteBox");
+  box.hidden = !(settings.remote && remoteInfo);
+  if (box.hidden) return;
+  drawQr($("#remoteQr"), remoteInfo.url, 5);
+  $("#remoteUrl").textContent = remoteInfo.url.replace(/\?k=.*/, "");
+}
+$("#swRemote").addEventListener("click", () => setRemote(!settings.remote));
+$("#remoteNew").addEventListener("click", async (e) => {
+  e.preventDefault();
+  try {
+    remoteInfo = (await api.invoke("remote_new_code")) || remoteInfo;
+    renderRemote();
+    toast("Código novo: escaneie o QR de novo no celular");
+  } catch (err) {
+    toast(String(err));
+  }
+});
+
+// ===================================================================
 // Atualizações (GitHub Releases)
 // ===================================================================
 let pendingUpdate = null;
@@ -2600,7 +2725,7 @@ render();
 
 api.listen("media-update", onMedia);
 if (!IS_WALLPAPER) {
-  api.listen("hp-control", (m) => m?.action && control(m.action));
+  api.listen("hp-control", (m) => m?.action && remoteCommand(m));
   api.listen("hp-mini-ready", () => publishNow(true));
   api.listen("mini-mode", (on) => $("#btnMini")?.classList.toggle("on", !!on));
 }
@@ -2622,6 +2747,7 @@ if (!IS_WALLPAPER && settings.wallpaperMode) {
 }
 
 if (!IS_WALLPAPER && settings.visualizer) api.invoke("set_visualizer", { on: true }).catch(() => {});
+if (!IS_WALLPAPER && settings.remote) setRemote(true, true);
 
 if (!IS_WALLPAPER) {
   setTimeout(() => checkUpdate(false), 4000);

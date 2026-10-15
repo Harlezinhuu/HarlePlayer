@@ -6,6 +6,7 @@ mod discord;
 mod media;
 mod mini;
 mod net;
+mod remote;
 mod search;
 mod updater;
 mod visualizer;
@@ -195,6 +196,33 @@ fn save_image(name: String, data_base64: String) -> Result<String, String> {
     Ok(path.display().to_string())
 }
 
+/// Controle pelo celular: liga o servidor na rede local e devolve o link do QR.
+#[tauri::command]
+fn remote_start(app: AppHandle) -> Result<remote::RemoteInfo, String> {
+    remote::start(&app)
+}
+
+#[tauri::command]
+fn remote_stop() {
+    remote::stop();
+}
+
+#[tauri::command]
+fn remote_new_code() -> Result<remote::RemoteInfo, String> {
+    remote::regenerate()
+}
+
+/// O que está tocando (o celular lê isso).
+#[tauri::command]
+fn remote_update(now: serde_json::Value) {
+    remote::set_now(&now);
+}
+
+#[tauri::command]
+fn remote_lyrics(lyrics: serde_json::Value) {
+    remote::set_lyrics(&lyrics);
+}
+
 /// Atualiza o "Ouvindo …" no perfil do Discord.
 #[tauri::command]
 fn discord_set(presence: discord::Presence) {
@@ -351,6 +379,11 @@ fn main() {
             youtube_audio,
             check_update,
             install_update,
+            remote_start,
+            remote_stop,
+            remote_new_code,
+            remote_update,
+            remote_lyrics,
             set_mini,
             set_visualizer,
             image_bytes,

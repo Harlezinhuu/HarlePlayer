@@ -93,3 +93,14 @@ test("player tira o id do vídeo do link do YouTube", () => {
   assert.equal(youtubeId("https://youtu.be/xyz"), "xyz");
   assert.equal(youtubeId("não é link"), null);
 });
+
+import { qrMatrix } from "../src/qr.js";
+test("QR code cresce com o texto e tem os 3 quadrados de canto", () => {
+  const small = qrMatrix("HI");
+  assert.equal(small.length, 21); // versão 1
+  const url = qrMatrix("http://192.168.0.15:47800/?k=0123456789abcdef0123456789abcdef");
+  assert.ok(url.length > 21);
+  for (const [x, y] of [[0, 0], [url.length - 7, 0], [0, url.length - 7]]) {
+    assert.ok(url[y][x] && url[y + 6][x + 6] && !url[y + 1][x + 1] && url[y + 3][x + 3]);
+  }
+});

@@ -710,3 +710,12 @@ body.no-visualizer .bg-pulse, body.no-visualizer #clock::before, body.no-visuali
 #shareCanvas { height: min(72vh, 760px); width: auto; aspect-ratio: 9 / 16; border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
 .share-actions { display: flex; gap: 8px; }
 body.mode-wallpaper #wrapped, body.mode-wallpaper #shareModal { display: none !important; }
+
+/* ---------- controle pelo celular ---------- */
+.remote-box { display: flex; gap: 14px; align-items: flex-start; margin-top: 10px; padding: 12px; border-radius: 14px; background: rgba(255,255,255,.06); }
+.remote-box canvas { width: 132px; height: 132px; border-radius: 10px; flex: none; image-rendering: pixelated; }
+.remote-box p { margin: 0 0 6px; font-size: 12px; line-height: 1.4; }
+.remote-box .small { font-size: 11px; }
+.remote-box a { font-size: 12px; color: rgb(var(--accent)); }
+.remote-box > div { min-width: 0; flex: 1; }
+.remote-box p { overflow-wrap: anywhere; }
