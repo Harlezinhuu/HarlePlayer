@@ -26,6 +26,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Fila no estilo Spotify**: *Tocar a seguir* e *Adicionar à fila* pelo menu **⋯** ou pelo clique direito, arrastar pra reordenar, embaralhar, repetir (a fila ou uma música) e limpar.
 - **Playlists**: crie, renomeie, reordene e toque em ordem ou embaralhado, com músicas do SoundCloud e do YouTube Music.
 - **Importar playlist pelo link** (ou colando o link na busca): **Spotify**, **SoundCloud** e **YouTube / YouTube Music**, sem login. As do Spotify abrem no app do Spotify com um clique, então **contam pro Wrapped**. As do SoundCloud e do YouTube tocam aqui dentro.
+- **Equalizador de 10 faixas** no player interno, com presets (Grave+, Vocal, Rock, Eletrônica…) ou do seu jeito.
 - **Volume**: do player interno, ou só do app que está tocando (o Spotify, por exemplo), pelo mixer do Windows, sem mexer no volume do PC inteiro.
 - **Aleatório e repetir** na barra, igual o Spotify: no player interno e também no app de origem, quando ele deixa (o Windows avisa se o app aceita).
 - Teclas de mídia, tocar/pausar, próxima, anterior e barra de progresso clicável.
@@ -42,6 +43,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 <img src="docs/wrapped.jpg" alt="Retrospectiva com top músicas, artistas, serviços e horário" />
 
 ### 🎨 Visual
+- **Temas**: layout clássico ou espelhado, cor de destaque da capa ou fixa (qualquer cor), fonte e tamanho da letra e fundo mais escuro.
 - **Relógio gigante** em três estilos: Sólido, Fino e Contorno.
 - **Letra sincronizada** via [LRCLIB](https://lrclib.net): o verso inteiro com as palavras acendendo no estilo karaokê, ou em pedaços grandes animados.
 - **Reage ao som**: o fundo, o brilho do relógio e a capa pulsam com o grave da música que está tocando, de qualquer app (inclusive no wallpaper).
@@ -53,6 +55,8 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Biblioteca de wallpapers**: vídeo (mp4/webm), GIF ou imagem, mais o **Aurora**, um fundo animado embutido que muda de cor conforme a capa.
 
 ### 🔌 Integrações
+- **Atalhos globais** que funcionam até dentro de jogo: `Ctrl+Alt+Espaço` (tocar/pausar), `Ctrl+Alt+→/←` (próxima/anterior), `Ctrl+Alt+↑/↓` (volume) e `Ctrl+Alt+M` (mini player).
+- **Aviso de música nova**: um cartão aparece no canto da tela quando a música troca (e no volume pelo atalho), sem roubar o foco do jogo.
 - **Discord Rich Presence**: "Ouvindo SoundCloud" (ou YouTube Music, YouTube…) no seu perfil, com capa, artista, barra de tempo e botão "Ouvir no …". Detecta sozinho onde a música está tocando, até no navegador.
 - **Controle pelo celular**: liga nas configurações, aponta a câmera pro QR code e o celular vira um controle (tocar, pular, volume, letra rolando, fila e busca), sem instalar nada. Funciona em Android e iPhone, na mesma rede Wi-Fi. O acesso é protegido por um código que só o QR tem.
 - **Se atualiza sozinho**: avisa quando sai versão nova nas Releases, baixa, instala e abre de novo com um clique.
@@ -69,6 +73,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 | `Espaço` | Tocar / pausar |
 | `/` ou `Ctrl+K` | Pesquisar |
 | `←` `→` | Girar o carrossel |
+| `Ctrl+Alt+Espaço` / `→` / `←` / `↑` / `↓` / `M` | Atalhos globais: tocar/pausar, próxima, anterior, volume, mini player |
 | `F11` (ou duplo clique no topo) | Tela cheia: depois de 3 s parado, sobra só relógio, capa e letra |
 | `Esc` | Fechar busca / configurações / sair da tela cheia |
 | Clique direito numa música | Tocar a seguir, adicionar à fila ou a uma playlist |
@@ -132,6 +137,8 @@ O `npm run demo` abre o front no navegador com músicas, letra e busca de exempl
 │ qr.js      QR code (sem biblioteca)  │        │ wallpaper.rs janela na camada WorkerW                 │
 │                                      │        │ mini.rs      janelinha sempre por cima                │
 │ 3 janelas: player, wallpaper, mini   │        │ remote.rs    servidor HTTP na rede local (celular)    │
+                                                │ hotkeys.rs   atalhos globais (RegisterHotKey)         │
+                                                │ notify.rs    aviso no canto sem roubar o foco         │
 └──────────────────────────────────────┘        │ updater.rs   Releases do GitHub → instala e reabre    │
                                                 └───────────────────────────────────────────────────────┘
 ```

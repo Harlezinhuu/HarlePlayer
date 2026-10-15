@@ -29,6 +29,15 @@ export function youtubeId(url) {
 
 import * as Q from "./queue.js";
 
+/** Faixas do equalizador (Hz). */
+export const EQ_FREQS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+
+/** Quanto baixar antes do EQ pra não estourar quando aumenta faixas (0–1). */
+export function eqPreamp(gains) {
+  const boost = Math.max(0, ...gains);
+  return Math.pow(10, (-boost * 0.6) / 20);
+}
+
 export function createPlayer({ api, onState, onQueue = () => {}, resolve = null, toast, ytHostId = "ytHost" }) {
   const audio = new Audio();
   audio.preload = "auto";
@@ -95,6 +104,45 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     updateMediaSession();
   };
 
+  // ---------- equalizador (WebAudio): <audio> → 10 filtros → volume → saída ----------
+  let actx = null, gainNode = null, filters = [];
+  let eqOn = false, eqGains = EQ_FREQS.map(() => 0);
+  function ensureGraph() {
+    if (actx) return;
+    try {
+      actx = new AudioContext();
+      const src = actx.createMediaElementSource(audio);
+      filters = EQ_FREQS.map((f, i) => {
+        const b = actx.createBiquadFilter();
+        b.type = i === 0 ? "lowshelf" : i === EQ_FREQS.length - 1 ? "highshelf" : "peaking";
+        b.frequency.value = f;
+        b.Q.value = 1.1;
+        return b;
+      });
+      gainNode = actx.createGain();
+      let node = src;
+      for (const f of filters) {
+        node.connect(f);
+        node = f;
+      }
+      node.connect(gainNode);
+      gainNode.connect(actx.destination);
+      applyEq();
+    } catch (e) {
+      console.warn("equalizador indisponível:", e);
+      actx = null;
+    }
+  }
+  function applyEq() {
+    if (actx) {
+      filters.forEach((f, i) => (f.gain.value = eqOn ? eqGains[i] || 0 : 0));
+      audio.volume = 1;
+      gainNode.gain.value = volume * volume * (eqOn ? eqPreamp(eqGains) : 1);
+    } else {
+      audio.volume = volume * volume;
+    }
+  }
+
   // ---------- <audio> (SoundCloud) ----------
   for (const ev of ["play", "pause", "playing", "seeked", "loadedmetadata", "waiting"]) audio.addEventListener(ev, emit);
   audio.addEventListener("ended", () => next(true));
@@ -112,6 +160,8 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(new Blob([bytes], { type: sniffAudioType(bytes) }));
     engine = "audio";
+    ensureGraph();
+    actx?.resume?.().catch(() => {});
     audio.src = objectUrl;
     loading = false;
     await audio.play();
@@ -362,9 +412,17 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   // volume 0–1 (curva ao quadrado: o meio da barra soa como "metade")
   function setVolume(v) {
     volume = Math.min(1, Math.max(0, v));
-    audio.volume = volume * volume;
+    applyEq();
     try { yt?.setVolume?.(Math.round(volume * volume * 100)); } catch {}
   }
 
-  return { playQueue, queue: queueApi, setVolume, toggle, next: () => next(), prev, seek, stop, state, get active() { return !!cur; } };
+  /** Liga/desliga o equalizador e define o ganho (dB) de cada faixa. */
+  function setEq(on, gains) {
+    eqOn = !!on;
+    if (gains) eqGains = gains.slice(0, EQ_FREQS.length);
+    if (eqOn) ensureGraph();
+    applyEq();
+  }
+
+  return { playQueue, queue: queueApi, setVolume, setEq, toggle, next: () => next(), prev, seek, stop, state, get active() { return !!cur; } };
 }

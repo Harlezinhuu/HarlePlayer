@@ -104,3 +104,11 @@ test("QR code cresce com o texto e tem os 3 quadrados de canto", () => {
     assert.ok(url[y][x] && url[y + 6][x + 6] && !url[y + 1][x + 1] && url[y + 3][x + 3]);
   }
 });
+
+import { eqPreamp, EQ_FREQS } from "../src/player.js";
+test("equalizador: 10 faixas e pré-ganho pra não estourar", () => {
+  assert.equal(EQ_FREQS.length, 10);
+  assert.equal(eqPreamp([0, 0, -6]), 1); // só cortando: não precisa baixar
+  const p = eqPreamp([9, 3, 0]);
+  assert.ok(p < 1 && p > 0.4, String(p));
+});

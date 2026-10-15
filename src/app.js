@@ -2,7 +2,7 @@
 // Dentro do app, fala com o Rust via window.__TAURI__.
 // Aberto direto no navegador, roda em "modo demo" com dados de exemplo.
 
-import { createPlayer } from "./player.js";
+import { createPlayer, EQ_FREQS } from "./player.js";
 import * as Stats from "./stats.js";
 import { drawQr } from "./qr.js";
 import { fmt, esc, rgbToHsl, hslToRgb, slotOf, cleanTitle, cleanArtist, lyricVariants, parseLrc, isPlaceholderTitle } from "./lib.js";
@@ -56,6 +56,16 @@ const DEFAULTS = {
   queueTab: "fila", // "fila" | "recentes" | "playlists"
   visualizer: true, // fundo/relógio/capa reagem ao grave
   remote: false, // controle pelo celular (servidor na rede local)
+  hotkeys: true, // atalhos globais Ctrl+Alt+…
+  layout: "classic", // "classic" | "mirror"
+  accent: "cover", // "cover" (cor da capa) ou "#rrggbb"
+  lyricFont: "serif", // "serif" | "sans" | "condensed"
+  lyricScale: 100, // %
+  dim: 0, // escurecer o fundo (%)
+  eq: false,
+  eqPreset: "flat",
+  eqGains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  notify: true, // aviso de música nova no canto da tela
   clock24: true,
   clockStyle: "solid", // solid | thin | outline
   wallpaperMode: false, // wallpaper animado atrás dos ícones
@@ -213,7 +223,11 @@ function shrinkImage(src, size = 220) {
 }
 
 // ---------- cor da capa ----------
-function setAccent(rgb) {
+let coverAccent = [120, 170, 255];
+const hexToRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+function setAccent(rgb, fromCover = true) {
+  if (fromCover) coverAccent = rgb;
+  if (settings.accent && settings.accent !== "cover" && /^#[0-9a-f]{6}$/i.test(settings.accent)) rgb = hexToRgb(settings.accent);
   const [h, s] = rgbToHsl(...rgb);
   accentHue = h;
   const accent = hslToRgb(h, Math.max(0.55, Math.min(s, 0.9)), 0.64);
@@ -1814,7 +1828,126 @@ function renderSettings() {
     .map((id) => `<button data-v="${id}" class="${id === settings.browserService ? "sel" : ""}">${esc(SERVICES[id].name)}</button>`)
     .join("");
   renderLibrary();
+  renderTheme();
+  renderEq();
 }
+
+// ---------- abas das configurações ----------
+$("#setTabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-st]");
+  if (!b) return;
+  for (const x of $$("#setTabs button")) x.classList.toggle("sel", x === b);
+  for (const pg of $$(".set-page")) pg.hidden = pg.dataset.page !== b.dataset.st;
+  $("#settings").scrollTop = 0;
+});
+
+// ---------- tema ----------
+const ACCENTS = ["#4c8dff", "#9b5de5", "#ff4d8d", "#ff5a4f", "#ff9f1c", "#ffd166", "#1ed760", "#2ec4b6", "#e5e7eb"];
+function applyTheme() {
+  document.body.classList.toggle("layout-mirror", settings.layout === "mirror");
+  for (const f of ["sans", "condensed"]) document.body.classList.toggle(`lyric-${f}`, settings.lyricFont === f);
+  document.documentElement.style.setProperty("--lyric-scale", String((settings.lyricScale || 100) / 100));
+  document.documentElement.style.setProperty("--dim", String((settings.dim || 0) / 100));
+  setAccent(coverAccent, false);
+}
+function renderTheme() {
+  $$("#segLayout button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.layout));
+  $$("#segLyricFont button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.lyricFont));
+  const custom = settings.accent !== "cover" && !ACCENTS.includes(settings.accent);
+  $("#segAccent").innerHTML =
+    `<button class="auto ${settings.accent === "cover" ? "sel" : ""}" data-c="cover" title="Muda conforme a capa">Da capa</button>` +
+    ACCENTS.map((c) => `<button style="--c:${c}" data-c="${c}" class="${settings.accent === c ? "sel" : ""}" title="${c}"></button>`).join("") +
+    `<label class="${custom ? "sel" : ""}" title="Outra cor" style="${custom ? `background:${settings.accent}` : ""}">${custom ? "" : "+"}<input type="color" id="accentCustom" value="${custom ? settings.accent : "#4c8dff"}"></label>`;
+  for (const [id, v] of [["#rngLyricSize", settings.lyricScale || 100], ["#rngDim", settings.dim || 0]]) {
+    const el = $(id);
+    el.value = v;
+    el.style.setProperty("--p", `${((v - el.min) / (el.max - el.min)) * 100}%`);
+  }
+}
+const setTheme = (patch) => {
+  Object.assign(settings, patch);
+  saveSettings();
+  applyTheme();
+  renderTheme();
+};
+$("#segLayout").addEventListener("click", (e) => e.target.dataset.v && setTheme({ layout: e.target.dataset.v }));
+$("#segLyricFont").addEventListener("click", (e) => e.target.dataset.v && setTheme({ lyricFont: e.target.dataset.v }));
+$("#segAccent").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-c]");
+  if (b) setTheme({ accent: b.dataset.c });
+});
+$("#segAccent").addEventListener("input", (e) => {
+  if (e.target.id !== "accentCustom") return;
+  settings.accent = e.target.value;
+  saveSettings();
+  applyTheme();
+});
+$("#segAccent").addEventListener("change", (e) => e.target.id === "accentCustom" && renderTheme());
+for (const [id, key] of [["#rngLyricSize", "lyricScale"], ["#rngDim", "dim"]]) {
+  $(id).addEventListener("input", (e) => {
+    settings[key] = +e.target.value;
+    applyTheme();
+    e.target.style.setProperty("--p", `${((e.target.value - e.target.min) / (e.target.max - e.target.min)) * 100}%`);
+  });
+  $(id).addEventListener("change", saveSettings);
+}
+
+// ---------- equalizador ----------
+const EQ_PRESETS = {
+  flat: { name: "Normal", g: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  bass: { name: "Grave+", g: [6, 5, 4, 2, 0, 0, 0, 0, 0, 0] },
+  bassmax: { name: "Grave forte", g: [9, 8, 6, 3, 0, -1, 0, 0, 0, 0] },
+  vocal: { name: "Vocal", g: [-2, -2, -1, 1, 3, 4, 3, 1, 0, -1] },
+  pop: { name: "Pop", g: [-1, 1, 3, 4, 2, 0, -1, -1, 0, 1] },
+  rock: { name: "Rock", g: [4, 3, 2, 0, -1, -1, 1, 3, 4, 4] },
+  electronic: { name: "Eletrônica", g: [5, 4, 1, 0, -2, 1, 0, 1, 4, 5] },
+  acoustic: { name: "Acústico", g: [3, 3, 2, 1, 1, 1, 2, 3, 2, 1] },
+  treble: { name: "Agudos+", g: [0, 0, 0, 0, 0, 1, 3, 5, 6, 6] },
+};
+const fmtHz = (f) => (f >= 1000 ? `${f / 1000}k` : String(f));
+function renderEq() {
+  $("#swEq").classList.toggle("on", settings.eq);
+  const custom = settings.eqPreset === "custom";
+  $("#segEqPreset").innerHTML =
+    Object.entries(EQ_PRESETS).map(([id, p]) => `<button data-v="${id}" class="${settings.eqPreset === id ? "sel" : ""}">${p.name}</button>`).join("") +
+    (custom ? `<button data-v="custom" class="sel">Personalizado</button>` : "");
+  $("#eqBands").classList.toggle("off", !settings.eq);
+  if ($("#eqBands").childElementCount !== EQ_FREQS.length) {
+    $("#eqBands").innerHTML = EQ_FREQS.map((f, i) => `<label class="eq-band"><span class="db" data-db="${i}"></span><input type="range" min="-12" max="12" step="1" data-i="${i}" aria-label="${fmtHz(f)} Hz"><span>${fmtHz(f)}</span></label>`).join("");
+  }
+  $$("#eqBands input").forEach((el, i) => {
+    el.value = settings.eqGains[i] || 0;
+    const d = +el.value;
+    $(`#eqBands [data-db="${i}"]`).textContent = d > 0 ? `+${d}` : String(d);
+  });
+}
+function applyEq() {
+  player?.setEq(settings.eq, settings.eqGains);
+}
+$("#swEq").addEventListener("click", () => {
+  settings.eq = !settings.eq;
+  saveSettings();
+  applyEq();
+  renderEq();
+});
+$("#segEqPreset").addEventListener("click", (e) => {
+  const id = e.target.dataset.v;
+  if (!id || !EQ_PRESETS[id]) return;
+  Object.assign(settings, { eqPreset: id, eqGains: EQ_PRESETS[id].g.slice(), eq: true });
+  saveSettings();
+  applyEq();
+  renderEq();
+});
+$("#eqBands").addEventListener("input", (e) => {
+  const i = +e.target.dataset.i;
+  if (!Number.isFinite(i)) return;
+  settings.eqGains = settings.eqGains.slice();
+  settings.eqGains[i] = +e.target.value;
+  settings.eqPreset = Object.keys(EQ_PRESETS).find((k) => EQ_PRESETS[k].g.every((g, j) => g === settings.eqGains[j])) || "custom";
+  applyEq();
+  renderEq();
+});
+$("#eqBands").addEventListener("change", saveSettings);
 
 function renderLibrary() {
   const sel = settings.wallpaperId || BUILTINS[0].id;
@@ -2270,6 +2403,7 @@ function onMedia(s, fromLocal = false) {
     updateArt(s.thumb);
     upsertHistory(s);
     loadLyrics(s);
+    scheduleNotify(k);
   } else if (k && s.thumb && s.thumb !== lastThumb) {
     updateArt(s.thumb);
     upsertHistory(s);
@@ -2601,6 +2735,86 @@ $("#shareCopy").addEventListener("click", () => {
 });
 
 // ===================================================================
+// Aviso de música nova (cartão no canto da tela) e atalhos globais
+// ===================================================================
+let notifyTimer = 0;
+const appFocused = () => !document.hidden && document.hasFocus();
+function scheduleNotify(key) {
+  if (!settings.notify || IS_WALLPAPER) return;
+  clearTimeout(notifyTimer);
+  // espera a capa e a cor chegarem; só avisa se o app não está na frente
+  notifyTimer = setTimeout(() => {
+    if (keyOf(media) === key && !appFocused()) notifyNow();
+  }, 900);
+}
+function notifyNow(label) {
+  if (!settings.notify || IS_WALLPAPER || !keyOf(media)) return;
+  const h = history.find((x) => x.key === keyOf(media));
+  api.invoke("notify_show", {
+    payload: {
+      label: label || "Tocando agora",
+      title: media.title,
+      artist: [media.artist, serviceName(playingService())].filter(Boolean).join(" · "),
+      cover: media.coverUrl || media.thumb || h?.thumb || null,
+      accent: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
+    },
+  }).catch(() => {});
+}
+/** Ctrl+Alt+↑/↓: muda o volume de quem está tocando e mostra no canto. */
+async function stepVolume(delta) {
+  let level, target;
+  if (isLocalVol()) {
+    vol.source = null;
+    level = settings.volume;
+    target = "Harle Player";
+  } else {
+    vol.source = media.available ? media.source || "" : "";
+    try {
+      const v = await api.invoke("get_volume", { source: vol.source });
+      level = v?.level ?? vol.level;
+      target = v?.target === "Sistema" ? "PC" : v?.target || "PC";
+    } catch {
+      level = vol.level;
+      target = "PC";
+    }
+  }
+  setVolumeLevel(Math.round((level + delta) * 20) / 20);
+  remoteVol = { level: vol.level, target };
+  if (!appFocused() && settings.notify) {
+    api.invoke("notify_show", {
+      payload: {
+        kind: "volume",
+        level: vol.level,
+        target,
+        title: keyOf(media) ? media.title : "Volume",
+        cover: media.coverUrl || media.thumb || null,
+        accent: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
+      },
+    }).catch(() => {});
+  } else {
+    toast(`Volume ${Math.round(vol.level * 100)}% · ${target}`);
+  }
+}
+async function setHotkeys(on, quiet = false) {
+  settings.hotkeys = on;
+  saveSettings();
+  try {
+    const failed = await api.invoke("set_hotkeys", { on });
+    $("#hotkeysNote").textContent = on && failed?.length ? `Outro programa já usa: ${failed.join(", ")}` : "";
+  } catch (e) {
+    if (!quiet) toast(String(e));
+  }
+  $("#swHotkeys").classList.toggle("on", settings.hotkeys);
+}
+$("#swHotkeys").addEventListener("click", () => setHotkeys(!settings.hotkeys));
+$("#swNotify").addEventListener("click", () => {
+  settings.notify = !settings.notify;
+  saveSettings();
+  $("#swNotify").classList.toggle("on", settings.notify);
+  if (settings.notify) notifyNow("Assim fica o aviso");
+});
+
+// ===================================================================
 // Controle pelo celular: o PC vira um servidorzinho na rede Wi-Fi
 // ===================================================================
 let remoteInfo = null;
@@ -2612,7 +2826,12 @@ function remoteCommand(m) {
   const t = m.track;
   switch (m.action) {
     case "toggle": case "next": case "prev":
+      if (m.from === "hotkey" && m.action === "toggle") setTimeout(() => notifyNow(media.playing ? "Tocando" : "Pausado"), 350);
       return control(m.action);
+    case "volup": case "voldown":
+      return stepVolume(m.action === "volup" ? 0.05 : -0.05);
+    case "mini":
+      return $("#btnMini").click();
     case "seek":
       return Number.isFinite(m.value) && control("seek", Math.round(m.value));
     case "volume":
@@ -2775,6 +2994,8 @@ renderService();
 if (!IS_WALLPAPER) await migrateOldBackground();
 await loadLibrary();
 renderSettings();
+applyTheme();
+applyEq();
 applyBackground();
 render();
 
@@ -2803,6 +3024,8 @@ if (!IS_WALLPAPER && settings.wallpaperMode) {
 
 if (!IS_WALLPAPER && settings.visualizer) api.invoke("set_visualizer", { on: true }).catch(() => {});
 if (!IS_WALLPAPER && settings.remote) setRemote(true, true);
+if (!IS_WALLPAPER && settings.hotkeys) setHotkeys(true, true);
+if (!IS_WALLPAPER) $("#swNotify").classList.toggle("on", settings.notify);
 
 if (!IS_WALLPAPER) {
   setTimeout(() => checkUpdate(false), 4000);

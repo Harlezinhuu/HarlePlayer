@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Harle Player — Aviso</title>
+  <style>
+    :root { --accent: 120, 170, 255; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; font-family: Inter, "Segoe UI", system-ui, sans-serif; color: #fff; user-select: none; }
+    #card {
+      position: absolute; top: 6px; right: 6px; left: 6px; height: 96px;
+      display: flex; align-items: center; gap: 13px; padding: 10px 14px 10px 10px; border-radius: 18px; overflow: hidden;
+      background: rgba(14, 16, 26, 0.88); border: 1px solid rgba(255,255,255,.14);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+      transform: translateX(110%); opacity: 0;
+    }
+    #card.in { animation: in .45s cubic-bezier(.2,.9,.25,1) forwards, out .4s ease-in 4.4s forwards; }
+    #card.stay { transform: none; opacity: 1; animation: out .4s ease-in 2.6s forwards; }
+    @keyframes in { to { transform: none; opacity: 1; } }
+    @keyframes out { from { transform: none; opacity: 1; } to { transform: translateX(30%); opacity: 0; } }
+    #glow { position: absolute; inset: 0; background: radial-gradient(80% 140% at 0% 50%, rgba(var(--accent), .35), transparent 70%); }
+    #cover { position: relative; width: 76px; height: 76px; border-radius: 12px; object-fit: cover; flex: none; background: rgba(255,255,255,.08); box-shadow: 0 6px 16px rgba(0,0,0,.4); }
+    #cover:not([src]) { visibility: hidden; }
+    .tx { position: relative; min-width: 0; flex: 1; }
+    #label { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgb(var(--accent)); }
+    #title { margin-top: 3px; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #artist { margin-top: 2px; font-size: 12.5px; color: rgba(255,255,255,.66); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .vol { display: none; align-items: center; gap: 10px; margin-top: 8px; }
+    .vol i { flex: 1; height: 5px; border-radius: 5px; background: rgba(255,255,255,.18); overflow: hidden; }
+    .vol i b { display: block; height: 100%; background: rgb(var(--accent)); box-shadow: 0 0 10px rgba(var(--accent), .8); }
+    .vol span { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; width: 34px; text-align: right; }
+    body.is-volume #artist { display: none; }
+    body.is-volume .vol { display: flex; }
+    body.is-volume #cover { width: 56px; height: 56px; }
+  </style>
+</head>
+<body>
+  <div id="card">
+    <div id="glow"></div>
+    <img id="cover" alt="" />
+    <div class="tx">
+      <div id="label">Tocando agora</div>
+      <div id="title"></div>
+      <div id="artist"></div>
+      <div class="vol"><i><b id="volFill"></b></i><span id="volVal"></span></div>
+    </div>
+  </div>
+<script>
+  const T = window.__TAURI__;
+  const $ = (s) => document.querySelector(s);
+  function show(p) {
+    if (!p) return;
+    if (p.accent) document.documentElement.style.setProperty("--accent", p.accent);
+    const vol = p.kind === "volume";
+    document.body.classList.toggle("is-volume", vol);
+    $("#label").textContent = vol ? `Volume · ${p.target || ""}` : p.label || "Tocando agora";
+    $("#title").textContent = p.title || "";
+    $("#artist").textContent = p.artist || "";
+    if (vol) {
+      const pct = Math.round((p.level || 0) * 100);
+      $("#volFill").style.width = `${pct}%`;
+      $("#volVal").textContent = `${pct}%`;
+    }
+    if (p.cover) $("#cover").src = p.cover; else $("#cover").removeAttribute("src");
+    // reinicia a animação (volume apertado várias vezes: só segura o cartão na tela)
+    const c = $("#card");
+    const visible = Date.now() - shownAt < 4300;
+    c.classList.remove("in", "stay");
+    void c.offsetWidth;
+    c.classList.add(vol && visible ? "stay" : "in");
+    shownAt = Date.now();
+  }
+  let shownAt = 0;
+  if (T) {
+    T.event.listen("hp-notify", (e) => setTimeout(() => show(e.payload), 30));
+    T.core.invoke("notify_last").then(show).catch(() => {});
+  } else {
+    show({ title: "Neon Rain", artist: "Lumen Vale", accent: "120, 170, 255" });
+  }
+</script>
+</body>
+</html>

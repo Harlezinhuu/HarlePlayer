@@ -19,6 +19,7 @@
     <canvas id="bgCanvas" hidden></canvas>
     <div class="bg-pulse"></div>
     <div class="bg-shade"></div>
+    <div class="bg-dim"></div>
     <div class="bg-grain"></div>
   </div>
 
@@ -171,85 +172,152 @@
       <button id="btnCloseSettings" class="win-btn" aria-label="Fechar"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
     </div>
 
-    <label class="row-label">Wallpapers</label>
-    <div id="lib" class="lib"></div>
-    <input id="fileInput" type="file" accept="video/mp4,video/webm,image/*" hidden />
-    <p class="hint">Vídeo (mp4/webm), GIF ou imagem. Fica salvo no app.</p>
-
-    <label class="row-label">Área de trabalho</label>
-    <div class="row toggle-row">
-      <span>Wallpaper animado <small class="muted">(atrás dos ícones)</small></span>
-      <button class="switch" id="swWallpaper" role="switch"></button>
+    <div class="set-tabs" id="setTabs">
+      <button data-st="visual" class="sel">Visual</button>
+      <button data-st="musica">Música</button>
+      <button data-st="extras">Extras</button>
     </div>
 
-    <div class="row toggle-row">
-      <span>Reagir ao som <small class="muted">(fundo, relógio e capa pulsam com o grave)</small></span>
-      <button class="switch" id="swVisualizer" role="switch"></button>
-    </div>
+    <!-- ========== VISUAL ========== -->
+    <div class="set-page" data-page="visual">
+      <label class="row-label">Layout</label>
+      <div class="seg" id="segLayout">
+        <button data-v="classic">Clássico</button>
+        <button data-v="mirror">Espelhado</button>
+      </div>
+      <p class="hint">Espelhado: relógio e fila na direita, letra na esquerda.</p>
 
-    <label class="row-label">Fundo do player</label>
-    <div class="seg" id="segBg">
-      <button data-v="dynamic">Capa da música</button>
-      <button data-v="custom">Wallpaper</button>
-      <button data-v="transparent">Transparente</button>
-    </div>
+      <label class="row-label">Cor de destaque</label>
+      <div class="swatches" id="segAccent"></div>
 
-    <label class="row-label">Discord</label>
-    <div class="row toggle-row">
-      <span>Mostrar no perfil <small class="muted">(Rich Presence)</small></span>
-      <button class="switch" id="swDiscord" role="switch"></button>
-    </div>
-    <div class="row toggle-row">
-      <span>Mostrar também o Spotify <small class="muted">(ele já aparece sozinho)</small></span>
-      <button class="switch" id="swDiscordSpotify" role="switch"></button>
-    </div>
-    <span class="row-sub">Música tocando no navegador conta como</span>
-    <div class="seg" id="segBrowser"></div>
-    <p class="hint" id="discordStatus"></p>
+      <label class="row-label">Letra</label>
+      <div class="seg" id="segLyricFont">
+        <button data-v="serif">Elegante</button>
+        <button data-v="sans">Moderna</button>
+        <button data-v="condensed">Condensada</button>
+      </div>
+      <div class="row toggle-row">
+        <span>Tamanho</span>
+        <input type="range" class="rng" id="rngLyricSize" min="70" max="140" step="5" />
+      </div>
 
-    <label class="row-label">Celular</label>
-    <div class="row toggle-row">
-      <span>Controle pelo celular <small class="muted">(mesma rede Wi-Fi)</small></span>
-      <button class="switch" id="swRemote" role="switch"></button>
-    </div>
-    <div id="remoteBox" class="remote-box" hidden>
-      <canvas id="remoteQr" width="10" height="10"></canvas>
-      <div>
-        <p>Aponte a câmera do celular pro código. Abre um controle no navegador, sem instalar nada.</p>
-        <p class="muted" id="remoteUrl"></p>
-        <p class="muted small">Se o Windows perguntar, permita o acesso em <b>redes privadas</b>.</p>
-        <a href="#" id="remoteNew">Gerar código novo</a>
+      <label class="row-label">Relógio</label>
+      <div class="seg" id="segClock">
+        <button data-v="solid">Sólido</button>
+        <button data-v="thin">Fino</button>
+        <button data-v="outline">Contorno</button>
+      </div>
+      <div class="row toggle-row">
+        <span>Relógio 24 horas</span>
+        <button class="switch" id="sw24" role="switch"></button>
+      </div>
+
+      <label class="row-label">Fundo do player</label>
+      <div class="seg" id="segBg">
+        <button data-v="dynamic">Capa da música</button>
+        <button data-v="custom">Wallpaper</button>
+        <button data-v="transparent">Transparente</button>
+      </div>
+      <div class="row toggle-row">
+        <span>Escurecer o fundo</span>
+        <input type="range" class="rng" id="rngDim" min="0" max="70" step="5" />
+      </div>
+      <div class="row toggle-row">
+        <span>Reagir ao som <small class="muted">(fundo, relógio e capa pulsam com o grave)</small></span>
+        <button class="switch" id="swVisualizer" role="switch"></button>
+      </div>
+
+      <label class="row-label">Wallpapers</label>
+      <div id="lib" class="lib"></div>
+      <input id="fileInput" type="file" accept="video/mp4,video/webm,image/*" hidden />
+      <p class="hint">Vídeo (mp4/webm), GIF ou imagem. Fica salvo no app.</p>
+      <div class="row toggle-row">
+        <span>Wallpaper animado <small class="muted">(atrás dos ícones da área de trabalho)</small></span>
+        <button class="switch" id="swWallpaper" role="switch"></button>
       </div>
     </div>
 
-    <label class="row-label">Tocar e buscar no</label>
-    <div class="seg" id="segService"></div>
+    <!-- ========== MÚSICA ========== -->
+    <div class="set-page" data-page="musica" hidden>
+      <label class="row-label">Tocar e buscar no</label>
+      <div class="seg" id="segService"></div>
 
-    <div class="row toggle-row">
-      <span>Letras sincronizadas</span>
-      <button class="switch" id="swLyrics" role="switch"></button>
-    </div>
-    <div class="seg" id="segLyrics" style="margin-top:10px">
-      <button data-v="line">Verso inteiro</button>
-      <button data-v="chunks">Pedaços grandes</button>
-    </div>
-    <div class="row toggle-row">
-      <span>Ajuste da letra</span>
-      <div class="stepper">
-        <button id="offMinus">−</button>
-        <span id="offVal">0,0 s</span>
-        <button id="offPlus">+</button>
+      <label class="row-label">Letras</label>
+      <div class="row toggle-row">
+        <span>Letras sincronizadas</span>
+        <button class="switch" id="swLyrics" role="switch"></button>
       </div>
+      <div class="seg" id="segLyrics" style="margin-top:10px">
+        <button data-v="line">Verso inteiro</button>
+        <button data-v="chunks">Pedaços grandes</button>
+      </div>
+      <div class="row toggle-row">
+        <span>Ajuste da letra</span>
+        <div class="stepper">
+          <button id="offMinus">−</button>
+          <span id="offVal">0,0 s</span>
+          <button id="offPlus">+</button>
+        </div>
+      </div>
+
+      <label class="row-label">Equalizador</label>
+      <div class="row toggle-row">
+        <span>Ligado</span>
+        <button class="switch" id="swEq" role="switch"></button>
+      </div>
+      <div class="seg" id="segEqPreset"></div>
+      <div class="eq-bands" id="eqBands"></div>
+      <p class="hint">Vale pro que toca no Harle Player (SoundCloud e YouTube). O Spotify tem equalizador próprio, nas configurações dele.</p>
     </div>
-    <label class="row-label">Relógio</label>
-    <div class="seg" id="segClock">
-      <button data-v="solid">Sólido</button>
-      <button data-v="thin">Fino</button>
-      <button data-v="outline">Contorno</button>
-    </div>
-    <div class="row toggle-row">
-      <span>Relógio 24 horas</span>
-      <button class="switch" id="sw24" role="switch"></button>
+
+    <!-- ========== EXTRAS ========== -->
+    <div class="set-page" data-page="extras" hidden>
+      <label class="row-label">Atalhos globais</label>
+      <div class="row toggle-row">
+        <span>Funcionam até dentro de jogo</span>
+        <button class="switch" id="swHotkeys" role="switch"></button>
+      </div>
+      <div class="keys">
+        <span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Espaço</kbd> tocar / pausar</span>
+        <span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>→</kbd> <kbd>←</kbd> próxima / anterior</span>
+        <span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>↑</kbd> <kbd>↓</kbd> volume</span>
+        <span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>M</kbd> mini player</span>
+      </div>
+      <p class="hint warn" id="hotkeysNote"></p>
+
+      <label class="row-label">Aviso de música nova</label>
+      <div class="row toggle-row">
+        <span>Cartão no canto da tela <small class="muted">(quando o app não está na frente)</small></span>
+        <button class="switch" id="swNotify" role="switch"></button>
+      </div>
+
+      <label class="row-label">Discord</label>
+      <div class="row toggle-row">
+        <span>Mostrar no perfil <small class="muted">(Rich Presence)</small></span>
+        <button class="switch" id="swDiscord" role="switch"></button>
+      </div>
+      <div class="row toggle-row">
+        <span>Mostrar também o Spotify <small class="muted">(ele já aparece sozinho)</small></span>
+        <button class="switch" id="swDiscordSpotify" role="switch"></button>
+      </div>
+      <span class="row-sub">Música tocando no navegador conta como</span>
+      <div class="seg" id="segBrowser"></div>
+      <p class="hint" id="discordStatus"></p>
+
+      <label class="row-label">Celular</label>
+      <div class="row toggle-row">
+        <span>Controle pelo celular <small class="muted">(mesma rede Wi-Fi)</small></span>
+        <button class="switch" id="swRemote" role="switch"></button>
+      </div>
+      <div id="remoteBox" class="remote-box" hidden>
+        <canvas id="remoteQr" width="10" height="10"></canvas>
+        <div>
+          <p>Aponte a câmera do celular pro código. Abre um controle no navegador, sem instalar nada.</p>
+          <p class="muted" id="remoteUrl"></p>
+          <p class="muted small">Se o Windows perguntar, permita o acesso em <b>redes privadas</b>.</p>
+          <a href="#" id="remoteNew">Gerar código novo</a>
+        </div>
+      </div>
     </div>
 
     <div class="panel-foot">
