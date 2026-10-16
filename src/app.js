@@ -66,6 +66,7 @@ const DEFAULTS = {
   eqPreset: "flat",
   eqGains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   notify: true, // aviso de música nova no canto da tela
+  autoMini: true, // abre o mini player ao minimizar
   clock24: true,
   clockStyle: "solid", // solid | thin | outline
   wallpaperMode: false, // wallpaper animado atrás dos ícones
@@ -2060,7 +2061,34 @@ $("#swVisualizer").addEventListener("click", () => {
   api.invoke("set_visualizer", { on: settings.visualizer }).catch(() => {});
 });
 $("#btnLyrics").addEventListener("click", toggleLyrics);
+// ---------- mini player automático ao minimizar ----------
+let miniAuto = false; // o mini atual foi aberto sozinho (então fecha sozinho também)
+if (!IS_WALLPAPER) {
+  api.listen("main-minimized", async () => {
+    if (!settings.autoMini || miniAuto || $("#btnMini").classList.contains("on")) return;
+    if (!keyOf(media) || !media.playing) return;
+    try {
+      if (await api.invoke("set_mini", { open: true })) {
+        miniAuto = true;
+        $("#btnMini").classList.add("on");
+      }
+    } catch {}
+  });
+  api.listen("main-restored", () => {
+    if (!miniAuto) return;
+    miniAuto = false;
+    api.invoke("set_mini", { open: false }).catch(() => {});
+    $("#btnMini").classList.remove("on");
+  });
+}
+$("#swAutoMini").addEventListener("click", () => {
+  settings.autoMini = !settings.autoMini;
+  saveSettings();
+  $("#swAutoMini").classList.toggle("on", settings.autoMini);
+});
+
 $("#btnMini").addEventListener("click", async () => {
+  miniAuto = false; // abriu/fechou na mão: não fecha sozinho
   const open = !$("#btnMini").classList.contains("on");
   try {
     const r = await api.invoke("set_mini", { open });
@@ -3003,7 +3031,10 @@ api.listen("media-update", onMedia);
 if (!IS_WALLPAPER) {
   api.listen("hp-control", (m) => m?.action && remoteCommand(m));
   api.listen("hp-mini-ready", () => publishNow(true));
-  api.listen("mini-mode", (on) => $("#btnMini")?.classList.toggle("on", !!on));
+  api.listen("mini-mode", (on) => {
+    $("#btnMini")?.classList.toggle("on", !!on);
+    if (!on) miniAuto = false; // fechou pelo × do próprio mini
+  });
 }
 if (IS_WALLPAPER) {
   // Janela do wallpaper: recarrega quando o player muda alguma configuração.
@@ -3026,6 +3057,7 @@ if (!IS_WALLPAPER && settings.visualizer) api.invoke("set_visualizer", { on: tru
 if (!IS_WALLPAPER && settings.remote) setRemote(true, true);
 if (!IS_WALLPAPER && settings.hotkeys) setHotkeys(true, true);
 if (!IS_WALLPAPER) $("#swNotify").classList.toggle("on", settings.notify);
+if (!IS_WALLPAPER) $("#swAutoMini").classList.toggle("on", settings.autoMini);
 
 if (!IS_WALLPAPER) {
   setTimeout(() => checkUpdate(false), 4000);

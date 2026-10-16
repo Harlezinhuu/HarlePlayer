@@ -260,7 +260,9 @@ fn discord_status() -> discord::Status {
 
 #[tauri::command]
 fn hide_to_tray(app: AppHandle) -> Result<(), String> {
-    main_window(&app)?.hide().map_err(|e| e.to_string())
+    main_window(&app)?.hide().map_err(|e| e.to_string())?;
+    let _ = app.emit("main-minimized", ());
+    Ok(())
 }
 
 #[tauri::command]
@@ -378,6 +380,23 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 
 fn main() {
     let app = tauri::Builder::default()
+        // avisa o front quando a janela principal é minimizada / volta (mini player automático)
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            match event {
+                tauri::WindowEvent::Resized(_) => {
+                    if window.is_minimized().unwrap_or(false) {
+                        let _ = window.emit("main-minimized", ());
+                    }
+                }
+                tauri::WindowEvent::Focused(true) => {
+                    let _ = window.emit("main-restored", ());
+                }
+                _ => {}
+            }
+        })
         .setup(|app| {
             build_tray(app)?;
             media::start_watcher(app.handle().clone());
