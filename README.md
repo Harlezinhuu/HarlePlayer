@@ -34,6 +34,8 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Karaokê com a sua voz**: tira a voz da música (no player interno), deixa a letra grande na tela e liga o **microfone nos seus fones**, com eco e reverb de palco. Dá pra **gravar** e salvar a apresentação.
 - **DJ com voz**: entre as músicas, uma voz em português anuncia o que vai tocar, tipo rádio, usando a sua retrospectiva ("essa é a 5ª vez que você ouve essa essa semana").
 
+- **Ouvir junto**: crie uma sala, mande o código e o que você tocar toca no app dos seus amigos, no mesmo segundo (pausa, pula e volta junto). Cada um ouve no próprio PC, pelo Harle Player ou abrindo no próprio Spotify. Tem reações com emoji na tela de todo mundo e pedidos de música. As mensagens passam pelo [ntfy.sh](https://ntfy.sh), **criptografadas** (AES-GCM) com uma chave que só existe no código de convite.
+
 ### 🔎 Buscar
 - **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…).
 - **Abas Tudo · Músicas · Artistas**: os principais resultados e a lista completa, que carrega mais conforme você rola. Clicou numa música, ela toca e o resto da lista vira a fila.
@@ -42,6 +44,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 ### 📊 Sua retrospectiva
 - **Seu "Wrapped" particular**, de qualquer app (Spotify, SoundCloud, YouTube…): minutos ouvidos, top músicas e artistas, onde você mais ouve e seu horário favorito, em 7 dias, 30 dias, no ano ou desde o começo.
 - **Gera uma imagem pros stories** (1080×1920) pra salvar ou copiar e postar. Tudo fica salvo só no seu PC.
+- **Retrospectiva em vídeo**: 22 segundos animados, no formato dos stories, com números subindo, seu artista nº 1 e o top 5, tocando um trecho da sua música mais ouvida.
 
 <img src="docs/wrapped.jpg" alt="Retrospectiva com top músicas, artistas, serviços e horário" />
 
@@ -49,6 +52,8 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Temas**: layout clássico ou espelhado, cor de destaque da capa ou fixa (qualquer cor), fonte e tamanho da letra e fundo mais escuro.
 - **Relógio gigante** em três estilos: Sólido, Fino e Contorno.
 - **Letra sincronizada** via [LRCLIB](https://lrclib.net): o verso inteiro com as palavras acendendo no estilo karaokê, ou em pedaços grandes animados.
+- **Clipe no fundo**: o clipe oficial da música que está tocando (até no Spotify) aparece no fundo, mudo e sincronizado com a música.
+- **Partículas e drop**: partículas dançam no grave e, quando a música "dropa", a tela pisca, treme e a capa explode em pedaços.
 - **Reage ao som**: o fundo, o brilho do relógio e a capa pulsam com o grave da música que está tocando, de qualquer app (inclusive no wallpaper).
 - **Mini player**: uma janelinha sempre por cima de tudo, no canto da tela, com capa e controles. Abre sozinho quando você minimiza o app com música tocando e some quando você volta. É só arrastar pra onde quiser.
 - **Tela cheia** (`F11`): os controles somem sozinhos e fica só o relógio, a capa e a letra, tipo tela de descanso.
@@ -133,19 +138,20 @@ O `npm run demo` abre o front no navegador com músicas, letra e busca de exempl
 ┌──────────── Front (src/) ────────────┐        ┌──────────────── Rust (src-tauri/src/) ────────────────┐
 │ HTML + CSS + JS puro, sem build      │        │ media.rs     SMTC do Windows: o que toca + controles  │
 │ app.js     tela, busca, painel       │        │ detect.rs    qual serviço (app ou aba do navegador)   │
-│ player.js  player interno + YouTube  │◀──IPC─▶│ search.rs    SoundCloud · YouTube Music · playlists   │
+│ player.js  player interno + YouTube  │◀──IPC─▶│ search.rs    SoundCloud · YouTube Music · clipes      │
 │ queue.js   fila (funções puras)      │        │ net.rs       LRCLIB (letras) e Deezer                 │
-│ stats.js   retrospectiva (puras)     │        │ ytdlp.rs     reserva do YouTube                       │
-│ lib.js     letra, cores, títulos     │        │ volume.rs    volume por app (WASAPI)                  │
-│ mini.js    mini player               │        │ visualizer.rs graves do som do PC (WASAPI)            │
-│ karaoke.js microfone, efeitos, gravar│        │ discord.rs   Rich Presence (named pipe)               │
-│ remote.html controle pelo celular    │        │ wallpaper.rs janela na camada WorkerW                 │
-│ qr.js      QR code (sem biblioteca)  │        │ mini.rs      janelinha sempre por cima                │
-│                                      │        │ remote.rs    servidor HTTP na rede local (celular)    │
-│ janelas: player, wallpaper, mini…    │        │ hotkeys.rs   atalhos globais (RegisterHotKey)         │
-└──────────────────────────────────────┘        │ notify.rs    aviso no canto sem roubar o foco         │
-                                                │ overlay.rs   letra flutuante por cima de tudo         │
-                                                │ ducking.rs   voz no Discord → abaixar a música        │
+│ stats.js   retrospectiva (puras)     │        │ party.rs     salas de ouvir junto (ntfy.sh)           │
+│ lib.js     letra, cores, títulos     │        │ ytdlp.rs     reserva do YouTube                       │
+│ party.js   ouvir junto (AES-GCM)     │        │ volume.rs    volume por app (WASAPI)                  │
+│ drops.js   detector de drop          │        │ visualizer.rs graves do som do PC (WASAPI)            │
+│ fx.js      partículas e explosão     │        │ ducking.rs   voz no Discord → abaixar a música        │
+│ wrappedVideo.js vídeo dos stories    │        │ discord.rs   Rich Presence (named pipe)               │
+│ karaoke.js microfone, efeitos, gravar│        │ wallpaper.rs janela na camada WorkerW                 │
+│ mini.js    mini player               │        │ mini.rs      janelinha sempre por cima                │
+│ remote.html controle pelo celular    │        │ overlay.rs   letra flutuante por cima de tudo         │
+│ qr.js      QR code (sem biblioteca)  │        │ notify.rs    aviso no canto sem roubar o foco         │
+└──────────────────────────────────────┘        │ hotkeys.rs   atalhos globais (RegisterHotKey)         │
+                                                │ remote.rs    servidor HTTP na rede local (celular)    │
                                                 │ updater.rs   Releases do GitHub → instala e reabre    │
                                                 └───────────────────────────────────────────────────────┘
 ```
