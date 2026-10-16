@@ -107,16 +107,24 @@ mod tests {
     #[test]
     #[ignore = "usa a internet"]
     fn ao_vivo_sala() {
+        // igual o app: alguém já está escutando a sala quando a mensagem chega
         let topic = format!("harle-teste-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
-        let r = ureq::post(&format!("{BASE}/{topic}")).set("User-Agent", "HarlePlayer").send_string("ola-sala");
-        match r {
-            Ok(resp) => println!("Sala ntfy: publicou {}", resp.into_string().unwrap_or_default().chars().take(200).collect::<String>()),
-            Err(e) => panic!("Sala: não publicou: {e}"),
-        }
-        std::thread::sleep(Duration::from_millis(800));
-        let t = ureq::get(&format!("{BASE}/{topic}/json?poll=1&since=all")).set("User-Agent", "HarlePlayer").call().expect("Sala: não leu").into_string().unwrap();
-        println!("Sala ntfy: leu {}", t.chars().take(300).collect::<String>().replace('\n', " | "));
-        let got: Vec<String> = t.lines().filter_map(message_of).collect();
-        assert!(got.iter().any(|m| m == "ola-sala"));
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let t2 = topic.clone();
+        std::thread::spawn(move || {
+            let agent = ureq::AgentBuilder::new().timeout_read(Duration::from_secs(20)).build();
+            if let Ok(resp) = agent.get(&format!("{BASE}/{t2}/json")).set("User-Agent", "HarlePlayer").call() {
+                for line in BufReader::new(resp.into_reader()).lines().map_while(Result::ok) {
+                    if let Some(m) = message_of(&line) {
+                        let _ = tx.send(m);
+                    }
+                }
+            }
+        });
+        std::thread::sleep(Duration::from_millis(1500));
+        publish(&topic, "ola-sala").expect("Sala: não publicou");
+        let got = rx.recv_timeout(Duration::from_secs(15));
+        println!("Sala ntfy (ao vivo): recebeu {:?}", got);
+        assert_eq!(got.ok().as_deref(), Some("ola-sala"));
     }
 }
