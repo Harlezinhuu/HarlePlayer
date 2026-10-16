@@ -6,6 +6,10 @@ import { createPlayer, EQ_FREQS } from "./player.js";
 import * as Stats from "./stats.js";
 import { drawQr } from "./qr.js";
 import { createKaraoke } from "./karaoke.js";
+import { createDropDetector } from "./drops.js";
+import { createFx, paletteOf } from "./fx.js";
+import { recordWrappedVideo, DURATION as VIDEO_SECONDS } from "./wrappedVideo.js";
+import * as Party from "./party.js";
 import { fmt, esc, rgbToHsl, hslToRgb, slotOf, cleanTitle, cleanArtist, lyricVariants, parseLrc, isPlaceholderTitle } from "./lib.js";
 
 const $ = (s) => document.querySelector(s);
@@ -56,6 +60,8 @@ const DEFAULTS = {
   volume: 0.8, // volume do player interno (0–1)
   queueTab: "fila", // "fila" | "recentes" | "playlists"
   visualizer: true, // fundo/relógio/capa reagem ao grave
+  particles: true, // partículas no fundo
+  dropFx: true, // efeitos no drop
   remote: false, // controle pelo celular (servidor na rede local)
   hotkeys: true, // atalhos globais Ctrl+Alt+…
   layout: "classic", // "classic" | "mirror"
@@ -74,6 +80,8 @@ const DEFAULTS = {
   dj: false, // DJ com voz entre as músicas
   djEvery: "some", // "all" | "some"
   djVoice: "",
+  partyName: "",
+  partyMode: "harle", // convidado: "harle" (toca aqui) | "spotify" (abre no Spotify, experimental)
   clock24: true,
   clockStyle: "solid", // solid | thin | outline
   wallpaperMode: false, // wallpaper animado atrás dos ícones
@@ -343,6 +351,7 @@ const idb = {
 const BUILTINS = [
   { id: "builtin:aurora", name: "Aurora", builtin: "aurora" },
   { id: "builtin:cover", name: "Capa da música", builtin: "cover" },
+  { id: "builtin:clip", name: "Clipe da música", builtin: "clip" },
 ];
 let library = [];
 
@@ -482,10 +491,14 @@ async function applyBackground() {
     }
     if (!rec) rec = BUILTINS[0];
     if (rec.builtin === "cover") mode = "dynamic";
+    if (rec.builtin === "clip") mode = "clip";
   }
 
-  document.body.classList.remove("bg-dynamic", "bg-custom", "bg-transparent");
-  document.body.classList.add(`bg-${mode}`);
+  document.body.classList.remove("bg-dynamic", "bg-custom", "bg-transparent", "bg-clip");
+  // clipe: por baixo fica a capa (aparece até o clipe carregar, ou se não achar clipe)
+  document.body.classList.add(mode === "clip" ? "bg-dynamic" : `bg-${mode}`);
+  if (mode === "clip") document.body.classList.add("bg-clip");
+  clipBg.setEnabled(mode === "clip");
   if (bgObjectUrl) {
     URL.revokeObjectURL(bgObjectUrl);
     bgObjectUrl = null;
@@ -503,6 +516,109 @@ async function applyBackground() {
     img.hidden = false;
   }
 }
+
+// ---------- "Clipe da música": o clipe oficial no fundo, mudo e sincronizado ----------
+const clipBg = (() => {
+  let enabled = false;
+  let yt = null, ytReady = null;
+  let curKey = "", curVid = null, ready = false;
+  const cache = new Map(Object.entries(store.get("hp.clips", {})));
+  const saveCache = () => {
+    const obj = Object.fromEntries([...cache.entries()].slice(-300));
+    store.set("hp.clips", obj);
+  };
+  function loadApi() {
+    if (window.YT?.Player) return Promise.resolve();
+    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+      const sc = document.createElement("script");
+      sc.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(sc);
+    }
+    // espera o YT ficar pronto sem trocar o callback que o player já usa
+    return new Promise((res, rej) => {
+      const t0 = Date.now();
+      const iv = setInterval(() => {
+        if (window.YT?.Player) { clearInterval(iv); res(); }
+        else if (Date.now() - t0 > 15000) { clearInterval(iv); rej(new Error("YouTube não carregou")); }
+      }, 200);
+    });
+  }
+  async function findVideo(key) {
+    if (cache.has(key)) return cache.get(key);
+    const q = `${cleanTitle(media.title || "")} ${cleanArtist(media.artist || "")}`.trim();
+    let vid = null;
+    try {
+      const r = await api.invoke("search_page", { service: "ytmusic", query: q, kind: "videos", cursor: null });
+      const want = cleanTitle(media.title || "").toLowerCase().slice(0, 12);
+      const tracks = r?.tracks || [];
+      const best = tracks.find((t) => t.title.toLowerCase().includes(want)) || tracks[0];
+      vid = best ? youtubeIdOf(best.url) : null;
+    } catch {}
+    cache.set(key, vid);
+    saveCache();
+    return vid;
+  }
+  const youtubeIdOf = (u) => { try { return new URL(u).searchParams.get("v"); } catch { return null; } };
+  function show(on) {
+    document.body.classList.toggle("clip-on", on);
+  }
+  async function load(key) {
+    curKey = key;
+    ready = false;
+    show(false);
+    if (!enabled || !key) return yt?.stopVideo?.();
+    const vid = await findVideo(key);
+    if (curKey !== key || !enabled) return;
+    curVid = vid;
+    if (!vid) return yt?.stopVideo?.(); // sem clipe: fica a capa
+    try { await loadApi(); } catch { return; }
+    if (curKey !== key) return;
+    const start = Math.max(0, positionNow() / 1000);
+    if (!yt) {
+      ytReady = new Promise((res) => {
+        yt = new YT.Player("bgClipHost", {
+          videoId: vid,
+          playerVars: { autoplay: 1, mute: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3, modestbranding: 1, playsinline: 1, rel: 0, start: Math.floor(start), origin: location.origin },
+          events: {
+            onReady: (e) => { e.target.mute(); res(); },
+            onStateChange: (e) => { if (e.data === 1) { ready = true; show(true); } },
+            onError: () => { cache.set(curKey, null); saveCache(); show(false); },
+          },
+        });
+      });
+    } else {
+      await ytReady;
+      yt.loadVideoById({ videoId: vid, startSeconds: start });
+      yt.mute();
+    }
+  }
+  // mantém o clipe no mesmo ponto da música (a cada 2 s)
+  setInterval(() => {
+    if (!enabled || !yt?.getPlayerState) return;
+    const key = keyOf(media);
+    if (key !== curKey) return load(key);
+    if (!curVid) return;
+    const st = yt.getPlayerState();
+    if (!media.playing || paused) {
+      if (st === 1) yt.pauseVideo();
+      return;
+    }
+    if (st !== 1 && st !== 3) yt.playVideo();
+    const drift = yt.getCurrentTime() * 1000 - positionNow();
+    if (Math.abs(drift) > 1200 && positionNow() / 1000 < (yt.getDuration?.() || 1e9)) yt.seekTo(positionNow() / 1000, true);
+  }, 2000);
+  return {
+    setEnabled(on) {
+      if (enabled === on) return;
+      enabled = on;
+      if (on) load(keyOf(media));
+      else { show(false); try { yt?.stopVideo(); } catch {} curKey = ""; }
+    },
+    trackChanged(key) {
+      if (enabled && key !== curKey) load(key);
+    },
+  };
+})();
 
 // Pausa tudo (vídeo, aurora, animações).
 function setPaused(on) {
@@ -978,6 +1094,7 @@ function openTrackMenu(x, y, t) {
     ${canPlay ? `<button data-c="now">${ICON.play}Tocar agora</button>
     <button data-c="next">${ICON.plus}Tocar a seguir</button>
     <button data-c="queue">${ICON.plus}Adicionar à fila</button><hr>` : ""}
+    ${party.role === "guest" ? `<button data-c="req">${ICON.plus}Pedir pra sala</button><hr>` : ""}
     <div class="ctx-label">Adicionar à playlist</div>
     ${playlists.filter((p) => !isSpotifyPl(p)).map((p) => `<button data-c="pl" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join("")}
     <button data-c="newpl" class="muted-btn">${ICON.plus}Nova playlist</button>`;
@@ -995,6 +1112,10 @@ function openTrackMenu(x, y, t) {
       case "next": player.queue.playNext(tr); toast("Toca a seguir"); break;
       case "queue": player.queue.add(tr); toast("Adicionada à fila"); break;
       case "pl": addToPlaylist(b.dataset.id, t); break;
+      case "req":
+        partySend({ type: "req", track: { title: tr.title, artist: tr.artist, url: tr.url, service: tr.service, cover: /^https:/.test(tr.cover || "") ? tr.cover : null } });
+        toast("Pedido enviado pro anfitrião");
+        break;
       case "newpl": {
         const p = newPlaylist(null, t);
         toast(`Criada "${p.name}" — renomeie em Playlists`);
@@ -1390,18 +1511,62 @@ function updateBeat() {
   const target = on ? beatTarget : 0;
   beat += (target - beat) * (target > beat ? 0.55 : 0.12); // sobe rápido, desce devagar
   if (beat < 0.004) beat = 0;
+  fx.setLevel(settings.particles ? beat : 0);
   if (Math.abs(beat - beatShown) > 0.004) {
     beatShown = beat;
     document.documentElement.style.setProperty("--beat", beat.toFixed(3));
   }
 }
+// ---------- efeitos: partículas, ondas nas batidas e explosão no drop ----------
+const drops = createDropDetector();
+const fx = createFx($("#fxCanvas"), {
+  getAccent: () => getComputedStyle(document.documentElement).getPropertyValue("--accent").split(",").map((x) => +x || 0),
+});
+function fxOrigin() {
+  const el = IS_WALLPAPER ? $("#ncCover") : $("#carousel .card.focus img, #carousel .card.focus");
+  const r = el?.getBoundingClientRect();
+  return r && r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2, el } : { x: innerWidth / 2, y: innerHeight / 2, el: null };
+}
+function onBeatLevel(v) {
+  if (!settings.visualizer || !media.playing) return;
+  const r = drops.feed(v, performance.now());
+  if (!settings.particles) return;
+  const o = fxOrigin();
+  if (r.beat) fx.beat(o.x, o.y, Math.min(1, v));
+  if (r.drop && settings.dropFx) dropNow(o);
+}
+function dropNow(o = fxOrigin()) {
+  const img = o.el?.tagName === "IMG" ? o.el : o.el?.querySelector?.("img");
+  fx.explode(o.x, o.y, img ? paletteOf(img) : null);
+  const flash = $("#fxFlash");
+  flash.classList.remove("go");
+  void flash.offsetWidth;
+  flash.classList.add("go");
+  document.body.classList.add("fx-shake");
+  setTimeout(() => document.body.classList.remove("fx-shake"), 560);
+  const card = $("#carousel .card.focus");
+  card?.classList.remove("drop-pop");
+  void card?.offsetWidth;
+  card?.classList.add("drop-pop");
+}
+function applyFx() {
+  if (settings.visualizer && settings.particles) fx.start();
+  else fx.stop();
+}
+
 api.listen("audio-level", (lv) => {
   // grave pesa mais; o volume geral ajuda em música sem grave
   beatTarget = Math.min(1, Math.max(0, (lv?.[0] || 0) * 0.85 + (lv?.[1] || 0) * 0.25) ** 1.6);
+  onBeatLevel(beatTarget);
 });
 if (api.demo) {
-  // modo demo: um "bumbo" falso no ritmo de 120 bpm
-  setInterval(() => (beatTarget = media.playing ? (Date.now() % 500 < 120 ? 0.9 : 0.15 + Math.random() * 0.1) : 0), 40);
+  // modo demo: 120 bpm, com uma "subida" calma e um drop a cada 24 s
+  setInterval(() => {
+    const t = Date.now() % 24000;
+    const kick = Date.now() % 500 < 120;
+    beatTarget = !media.playing ? 0 : t > 15000 && t < 19500 ? 0.08 + Math.random() * 0.05 : kick ? (t >= 19500 ? 1 : 0.85) : 0.15 + Math.random() * 0.1;
+    onBeatLevel(beatTarget);
+  }, 33);
 }
 
 function frame() {
@@ -1831,6 +1996,8 @@ function renderSettings() {
   document.querySelectorAll("#segClock button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.clockStyle));
   $("#swDiscord").classList.toggle("on", settings.discord);
   $("#swVisualizer").classList.toggle("on", settings.visualizer);
+  $("#swParticles").classList.toggle("on", settings.particles);
+  $("#swDropFx").classList.toggle("on", settings.dropFx);
   document.body.classList.toggle("no-visualizer", !settings.visualizer);
   $("#swDiscordSpotify").classList.toggle("on", settings.discordSpotify);
   $("#segBrowser").innerHTML = ["soundcloud", "ytmusic", "youtube"]
@@ -2062,10 +2229,23 @@ const toggleLyrics = () => {
   renderSettings();
 };
 $("#swLyrics").addEventListener("click", toggleLyrics);
+$("#swParticles").addEventListener("click", () => {
+  settings.particles = !settings.particles;
+  saveSettings();
+  renderSettings();
+  applyFx();
+});
+$("#swDropFx").addEventListener("click", () => {
+  settings.dropFx = !settings.dropFx;
+  saveSettings();
+  renderSettings();
+  if (settings.dropFx) dropNow();
+});
 $("#swVisualizer").addEventListener("click", () => {
   settings.visualizer = !settings.visualizer;
   saveSettings();
   renderSettings();
+  applyFx();
   api.invoke("set_visualizer", { on: settings.visualizer }).catch(() => {});
 });
 $("#btnLyrics").addEventListener("click", toggleLyrics);
@@ -2440,6 +2620,7 @@ function onMedia(s, fromLocal = false) {
     upsertHistory(s);
     loadLyrics(s);
     scheduleNotify(k);
+    clipBg.trackChanged(k);
     djOnTrack(k);
     if (kOn) setTimeout(renderKaraoke, 300);
   } else if (k && s.thumb && s.thumb !== lastThumb) {
@@ -2729,8 +2910,64 @@ async function drawShareCard() {
   ctx.textAlign = "left";
 }
 
+let shareMode = "image";
+let videoResult = null;
+function setShareMode(mode) {
+  shareMode = mode;
+  $("#shareSave").textContent = mode === "video" ? "Salvar vídeo" : "Salvar imagem";
+  $("#shareCopy").hidden = mode === "video";
+  $("#shareStatus").textContent = "";
+}
+
+/** Trecho da sua música nº 1 (procura no SoundCloud e baixa); null = usa a batida gerada. */
+async function topSongAudio(t) {
+  if (!t || api.demo) return null;
+  try {
+    const res = await api.invoke("search_music", { service: "soundcloud", query: `${cleanTitle(t.title)} ${cleanArtist(t.artist || "")}`.trim() });
+    const url = res?.tracks?.[0]?.url;
+    if (!url) return null;
+    const buf = await api.invoke("soundcloud_audio", { url });
+    const ctx = new AudioContext();
+    const audio = await ctx.decodeAudioData(new Uint8Array(buf).buffer);
+    ctx.close();
+    return audio.duration > VIDEO_SECONDS + 5 ? audio : null;
+  } catch {
+    return null;
+  }
+}
+
+$("#wrVideo").addEventListener("click", async () => {
+  const { from, to, label } = Stats.periodRange(wrPeriod);
+  const r = Stats.summarize(stats, from, to);
+  if (!r.totalSec) return;
+  $("#wrVideo").disabled = true;
+  setShareMode("video");
+  videoResult = null;
+  $("#shareModal").hidden = false;
+  $("#shareModal").classList.add("recording");
+  try {
+    $("#shareStatus").textContent = "Preparando (capas e um trecho da sua nº 1)…";
+    await document.fonts?.ready;
+    const [artistImg, ...trackImgs] = await Promise.all([loadImg(r.artists[0]?.cover), ...r.tracks.slice(0, 5).map((t) => loadImg(t.cover))]);
+    const audio = await topSongAudio(r.tracks[0]);
+    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").split(",").map((x) => +x || 0);
+    videoResult = await recordWrappedVideo(
+      $("#shareCanvas"),
+      { summary: r, label, accent, images: { artist: artistImg, tracks: trackImgs }, audio, serviceName },
+      (t) => ($("#shareStatus").textContent = `Gravando o vídeo… ${Math.min(VIDEO_SECONDS, Math.floor(t))}/${VIDEO_SECONDS} s${audio ? " · com a sua nº 1 tocando" : ""}`),
+    );
+    $("#shareStatus").textContent = `Pronto! ${(videoResult.blob.size / 1048576).toFixed(1)} MB · ${videoResult.mime.includes("mp4") ? "MP4" : "WebM"}`;
+  } catch (e) {
+    $("#shareStatus").textContent = `Não deu pra gravar o vídeo: ${e?.message || e}`;
+  } finally {
+    $("#shareModal").classList.remove("recording");
+    $("#wrVideo").disabled = false;
+  }
+});
+
 $("#wrShare").addEventListener("click", async () => {
   $("#wrShare").disabled = true;
+  setShareMode("image");
   try {
     await drawShareCard();
     $("#shareModal").hidden = false;
@@ -2745,6 +2982,7 @@ $("#shareModal").addEventListener("click", (e) => {
   if (e.target.id === "shareModal") $("#shareModal").hidden = true;
 });
 $("#shareSave").addEventListener("click", async () => {
+  if (shareMode === "video") return saveVideo();
   const data = $("#shareCanvas").toDataURL("image/png");
   const name = `harle-wrapped-${Stats.dayKey(new Date())}`;
   if (api.demo) {
@@ -2761,6 +2999,31 @@ $("#shareSave").addEventListener("click", async () => {
     toast(`Não consegui salvar: ${e}`, 4000);
   }
 });
+async function saveVideo() {
+  if (!videoResult) return;
+  const ext = videoResult.mime.includes("mp4") ? "mp4" : "webm";
+  const name = `harle-wrapped-${Stats.dayKey(new Date())}`;
+  const data = await new Promise((res) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.readAsDataURL(videoResult.blob);
+  });
+  if (api.demo) {
+    // (link de blob: o tipo "video/mp4;codecs=avc1…,mp4a…" tem vírgula e quebra um link data:)
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(videoResult.blob);
+    a.download = `${name}.${ext}`;
+    a.click();
+    return;
+  }
+  try {
+    const path = await api.invoke("save_video", { name, dataBase64: data });
+    toast(`Vídeo salvo em ${path}`, 5000);
+  } catch (e) {
+    toast(`Não consegui salvar: ${e}`, 4000);
+  }
+}
+
 $("#shareCopy").addEventListener("click", () => {
   $("#shareCanvas").toBlob(async (blob) => {
     try {
@@ -3163,6 +3426,274 @@ $("#kRec").addEventListener("click", async () => {
 });
 
 // ===================================================================
+// Ouvir junto: salas com código, sincronizadas pelo ntfy.sh (criptografado)
+// ===================================================================
+const EMOJIS = ["🔥", "❤️", "😂", "👏", "🕺", "😭"];
+const party = {
+  room: null, role: null, status: "", hostState: null, applying: "",
+  myId: Math.random().toString(36).slice(2, 10),
+  members: new Map(), requests: [], lastSent: null, lastSentAt: 0, lastReact: 0,
+};
+const myName = () => (settings.partyName || "").trim() || "Alguém";
+
+async function partySend(obj) {
+  if (!party.room) return;
+  const body = await Party.seal(party.room.key, { ...obj, id: party.myId, name: myName(), role: party.role, t: Date.now() });
+  try {
+    await api.invoke("party_send", { topic: party.room.topic, body });
+  } catch (e) {
+    if (!/Muitas/.test(String(e))) toast(`Sala: ${e}`, 3000);
+  }
+}
+
+async function partyEnter(code, role) {
+  if (party.room) await partyLeave(true);
+  party.room = await Party.roomFromCode(code);
+  party.role = role;
+  party.members = new Map([[party.myId, { name: myName(), role, me: true, at: Date.now() }]]);
+  party.requests = [];
+  party.hostState = null;
+  party.applying = "";
+  party.lastSent = null;
+  try {
+    await api.invoke("party_join", { topic: party.room.topic });
+  } catch (e) {
+    party.room = null;
+    return toast(`Não deu pra entrar na sala: ${e}`, 4000);
+  }
+  await partySend({ type: "hello" });
+  if (role === "host") partyHostTick(true);
+  renderParty();
+  toast(role === "host" ? "Sala criada! Mande o código pros amigos" : "Entrou na sala 🎧");
+}
+async function partyLeave(quiet = false) {
+  if (!party.room) return;
+  await partySend({ type: "bye" });
+  api.invoke("party_leave").catch(() => {});
+  party.room = null;
+  party.role = null;
+  party.members.clear();
+  renderParty();
+  if (!quiet) toast("Você saiu da sala");
+}
+
+api.listen("party-status", (st) => {
+  party.status = st;
+  renderParty();
+});
+api.listen("party-msg", async (text) => {
+  if (!party.room) return;
+  const m = await Party.open(party.room.key, text);
+  if (!m || m.id === party.myId) return;
+  const fresh = Date.now() - (m.t || 0) < 15000; // o ntfy reenvia os últimos 2 min ao entrar
+  if (m.type === "bye") {
+    party.members.delete(m.id);
+    if (fresh) toast(`${m.name} saiu da sala`);
+  } else {
+    const had = party.members.has(m.id);
+    party.members.set(m.id, { name: m.name, role: m.role, at: m.t });
+    if (m.type === "hello" && fresh && !had) {
+      toast(`${m.name} entrou na sala`);
+      if (party.role === "host") setTimeout(() => partyHostTick(true), 400);
+    }
+  }
+  if (m.type === "state" && m.role === "host" && party.role === "guest") {
+    if (!party.hostState || m.t >= party.hostState.t) {
+      party.hostState = m;
+      partyApplyHost();
+    }
+  }
+  if (m.type === "react" && fresh) showReaction(m.emoji, m.name);
+  if (m.type === "req" && fresh && party.role === "host" && m.track?.title) {
+    party.requests.unshift({ ...m.track, from: m.name });
+    party.requests = party.requests.slice(0, 8);
+    toast(`${m.name} pediu: ${m.track.title}`, 4000);
+  }
+  renderParty();
+});
+
+// ---------- anfitrião: manda o que está tocando quando muda (e de 25 em 25 s) ----------
+function partyHostTick(force = false) {
+  if (party.role !== "host") return;
+  const key = keyOf(media);
+  const pos = Math.round(positionNow());
+  const last = party.lastSent;
+  const now = Date.now();
+  const jumped = last && last.key === key && Math.abs(Party.expectedPosition(last, now) - pos) > 3000;
+  const changed = !last || last.key !== key || last.playing !== !!media.playing || jumped;
+  if (!force && !changed && now - party.lastSentAt < 25000) return;
+  if (now - party.lastSentAt < 1200 && !force) return;
+  const h = key ? history.find((x) => x.key === key) : null;
+  const playLink = local?.link && /soundcloud\.com|youtube\.com|youtu\.be/.test(local.link) ? local.link : null;
+  const st = {
+    type: "state",
+    key,
+    track: key ? {
+      title: media.title, artist: media.artist || "", durationMs: media.durationMs || 0,
+      cover: /^https:/.test(media.coverUrl || "") ? media.coverUrl : null,
+      url: playLink, service: playLink ? (playLink.includes("soundcloud") ? "soundcloud" : "ytmusic") : null,
+    } : null,
+    playing: !!media.playing,
+    positionMs: pos,
+    durationMs: media.durationMs || 0,
+    at: now,
+  };
+  party.lastSent = st;
+  party.lastSentAt = now;
+  partySend(st);
+  void h;
+}
+setInterval(() => {
+  partyHostTick();
+  if (party.room && Date.now() % 60000 < 1000) partySend({ type: "ping" });
+}, 1000);
+
+// ---------- convidado: segue o anfitrião ----------
+async function partyApplyHost() {
+  const st = party.hostState;
+  if (!st?.track?.title) return;
+  const exp = Party.expectedPosition(st);
+  if (!Party.sameSong({ title: media.title, artist: media.artist }, st.track)) {
+    if (party.applying === st.track.title) return;
+    party.applying = st.track.title;
+    toast(`Sala: tocando ${st.track.title}`, 2500);
+    if (settings.partyMode === "spotify") await partyOpenInSpotify(st);
+    else await partyPlayHere(st);
+    // espera a música começar e pula pro mesmo ponto do anfitrião
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      if (Party.sameSong({ title: media.title, artist: media.artist }, st.track) && media.playing) {
+        control("seek", Party.expectedPosition(party.hostState || st));
+        break;
+      }
+    }
+    party.applying = "";
+    return;
+  }
+  if (!!media.playing !== st.playing) control("toggle");
+  else if (st.playing && Math.abs(positionNow() - exp) > 3000) control("seek", exp);
+}
+async function partyPlayHere(st) {
+  if (!player) return;
+  const t = st.track;
+  if (t.url) return player.playQueue([toTrack({ title: t.title, artist: t.artist, cover: t.cover, url: t.url, durationMs: t.durationMs }, t.service || "ytmusic")], 0);
+  try {
+    const res = await api.invoke("search_music", { service: "ytmusic", query: `${cleanTitle(t.title)} ${cleanArtist(t.artist)}`.trim() });
+    const f = res?.tracks?.[0];
+    if (f) player.playQueue([toTrack(f, "ytmusic")], 0);
+    else toast(`Não achei "${t.title}" pra tocar aqui`);
+  } catch (e) {
+    toast(String(e));
+  }
+}
+/** Experimental: acha a música no Spotify (Deezer → song.link) e abre no app do Spotify. */
+async function partyOpenInSpotify(st) {
+  try {
+    const d = await httpJson(`https://api.deezer.com/search?q=${enc(`${cleanTitle(st.track.title)} ${cleanArtist(st.track.artist)}`)}&limit=1`);
+    const link = d?.data?.[0]?.link;
+    if (!link) throw new Error("não achei no catálogo");
+    const sl = await httpJson(`https://api.song.link/v1-alpha.1/links?url=${enc(link)}&userCountry=BR`);
+    const uri = sl?.linksByPlatform?.spotify?.nativeAppUriDesktop;
+    if (!uri) throw new Error("não está no Spotify");
+    await api.invoke("open_url", { url: uri });
+    setTimeout(() => !media.playing && control("toggle"), 2500);
+  } catch (e) {
+    toast(`Spotify: ${e?.message || e}. Tocando aqui no app.`, 3500);
+    return partyPlayHere(st);
+  }
+}
+
+// ---------- reações (emoji subindo na tela de todo mundo) ----------
+function showReaction(emoji, name) {
+  if (!EMOJIS.includes(emoji)) return;
+  const el = document.createElement("div");
+  el.className = "reaction";
+  el.style.left = `${12 + Math.random() * 76}%`;
+  el.innerHTML = `<b>${emoji}</b><span>${esc(name || "")}</span>`;
+  $("#reactLayer").appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+function react(emoji) {
+  if (!party.room || Date.now() - party.lastReact < 1500) return;
+  party.lastReact = Date.now();
+  showReaction(emoji, myName());
+  partySend({ type: "react", emoji });
+}
+
+// ---------- painel ----------
+function renderParty() {
+  const inRoom = !!party.room;
+  $("#btnParty").classList.toggle("on", inRoom);
+  $("#btnParty").dataset.count = inRoom ? party.members.size : "";
+  $("#partyOut").hidden = inRoom;
+  $("#partyIn").hidden = !inRoom;
+  $("#partyName").value = settings.partyName || "";
+  if (!inRoom) return;
+  $("#partyCode").textContent = party.room.code;
+  $("#partyRole").textContent = party.role === "host" ? "Você é o anfitrião: o que você tocar, toca pra todo mundo." : "Seguindo o anfitrião da sala.";
+  $("#partyDot").className = `dot ${party.status === "offline" ? "off" : "on"}`;
+  $("#partyMembers").innerHTML = [...party.members.values()]
+    .sort((a, b) => (b.role === "host") - (a.role === "host"))
+    .map((m) => `<li><span class="av">${esc((m.name || "?")[0].toUpperCase())}</span>${esc(m.name)}${m.me ? " <small>(você)</small>" : ""}${m.role === "host" ? ` <small class="host">anfitrião</small>` : ""}</li>`)
+    .join("");
+  $("#partyGuestOpts").hidden = party.role !== "guest";
+  $$("#segPartyMode button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.partyMode));
+  $("#partyReqs").hidden = party.role !== "host" || !party.requests.length;
+  $("#partyReqList").innerHTML = party.requests
+    .map((r, i) => `<li><div><b>${esc(r.title)}</b><span>${esc(r.artist || "")} · pedido por ${esc(r.from)}</span></div><button class="btn" data-req="${i}">Tocar a seguir</button></li>`)
+    .join("");
+}
+$("#btnParty").addEventListener("click", () => {
+  $("#partyPanel").hidden = !$("#partyPanel").hidden;
+  renderParty();
+});
+$("#partyClose").addEventListener("click", () => ($("#partyPanel").hidden = true));
+$("#partyName").addEventListener("change", (e) => {
+  settings.partyName = e.target.value.trim().slice(0, 24);
+  saveSettings();
+});
+$("#partyCreate").addEventListener("click", () => {
+  if (!settings.partyName) settings.partyName = $("#partyName").value.trim().slice(0, 24);
+  saveSettings();
+  partyEnter(Party.makeCode(), "host");
+});
+$("#partyJoinBtn").addEventListener("click", () => {
+  const code = Party.normalizeCode($("#partyJoinCode").value);
+  if (!code) return toast("Código inválido: são 16 letras/números, tipo K7QM-2X9P-RT4W-H8NA");
+  settings.partyName = $("#partyName").value.trim().slice(0, 24) || settings.partyName;
+  saveSettings();
+  partyEnter(code, "guest");
+});
+$("#partyJoinCode").addEventListener("keydown", (e) => e.key === "Enter" && $("#partyJoinBtn").click());
+$("#partyLeave").addEventListener("click", () => partyLeave());
+$("#partyCopy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(party.room.code);
+    toast("Código copiado: mande pros amigos 📋");
+  } catch {
+    toast(party.room.code, 6000);
+  }
+});
+$("#partyReacts").addEventListener("click", (e) => e.target.dataset.e && react(e.target.dataset.e));
+$("#segPartyMode").addEventListener("click", (e) => {
+  if (!e.target.dataset.v) return;
+  settings.partyMode = e.target.dataset.v;
+  saveSettings();
+  renderParty();
+});
+$("#partyReqList").addEventListener("click", async (e) => {
+  const i = e.target.dataset.req;
+  if (i === undefined) return;
+  const r = party.requests.splice(+i, 1)[0];
+  renderParty();
+  if (!player) return;
+  if (r.url) player.queue.playNext(toTrack(r, r.service === "soundcloud" ? "soundcloud" : "ytmusic"));
+  else player.queue.playNext({ ...trackFrom(r, "ytmusic"), url: null });
+  toast(`"${r.title}" toca a seguir`);
+});
+window.addEventListener("beforeunload", () => party.room && partySend({ type: "bye" }));
+
+// ===================================================================
 // Controle pelo celular: o PC vira um servidorzinho na rede Wi-Fi
 // ===================================================================
 let remoteInfo = null;
@@ -3344,6 +3875,7 @@ renderService();
 if (!IS_WALLPAPER) await migrateOldBackground();
 await loadLibrary();
 renderSettings();
+applyFx();
 applyTheme();
 applyEq();
 applyBackground();

@@ -1,14 +1,14 @@
 {
   "name": "harle-player",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Player de música estético pro desktop — Spotify, YouTube Music, SoundCloud e Apple Music",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
     "demo": "npx --yes http-server src -p 5173 -c-1 -o",
-    "test": "node --test tests/lib.test.mjs tests/queue.test.mjs tests/stats.test.mjs"
+    "test": "node --test tests/lib.test.mjs tests/queue.test.mjs tests/stats.test.mjs tests/drops.test.mjs tests/party.test.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

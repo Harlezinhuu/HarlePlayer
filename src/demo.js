@@ -83,6 +83,7 @@ export function createDemoApi() {
   } catch {}
 
   let demoVol = 0.6;
+  window.__partyDeliver = (b) => (listeners["party-msg"] || []).forEach((cb) => cb(b));
   return {
     demo: true,
     sampleTracks: TRACKS,
@@ -145,6 +146,14 @@ export function createDemoApi() {
             tracks: TRACKS.map((t, i) => ({ title: t.title, artist: t.artist, cover: sp ? null : t.thumb, url: sp ? `https://open.spotify.com/track/demo${i}` : `https://soundcloud.com/demo/${i}`, durationMs: t.durationMs })),
           };
         }
+        case "party_join":
+          setTimeout(() => (listeners["party-status"] || []).forEach((cb) => cb("online")), 200);
+          return;
+        case "party_send":
+          // no demo a "sala" é só um eco local (as próprias mensagens são ignoradas pelo id)
+          setTimeout(() => (listeners["party-msg"] || []).forEach((cb) => cb(args.body)), 120);
+          window.__partyBridge?.(args.body); // testes: liga duas janelas como se fossem dois PCs
+          return;
         case "get_volume":
           return { level: demoVol, target: "Spotify" };
         case "set_volume":

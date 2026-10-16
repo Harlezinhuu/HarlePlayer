@@ -17,11 +17,16 @@
     <img id="bgImage" alt="" hidden />
     <video id="bgVideo" autoplay muted loop playsinline hidden></video>
     <canvas id="bgCanvas" hidden></canvas>
+    <div id="bgClip"><div id="bgClipHost"></div></div>
     <div class="bg-pulse"></div>
     <div class="bg-shade"></div>
     <div class="bg-dim"></div>
     <div class="bg-grain"></div>
   </div>
+
+  <!-- ===== Efeitos (partículas, ondas, explosão no drop) ===== -->
+  <canvas id="fxCanvas" aria-hidden="true"></canvas>
+  <div id="fxFlash" aria-hidden="true"></div>
 
   <!-- ===== Letra (por cima do fundo) ===== -->
   <div id="lyrics" aria-live="off"><span id="lyricChunk"></span></div>
@@ -137,6 +142,9 @@
       <button id="btnVolume" class="tool-btn" title="Volume (roda do mouse ajusta)" aria-label="Volume">
         <svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" class="vol-body" /><path class="vol-w1" d="M15.5 9.2a4 4 0 0 1 0 5.6" /><path class="vol-w2" d="M18 6.8a7.5 7.5 0 0 1 0 10.4" /><path class="vol-x" d="M16 9.5l5 5M21 9.5l-5 5" /></svg>
       </button>
+      <button id="btnParty" class="tool-btn badge" title="Ouvir junto com amigos" aria-label="Ouvir junto">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2" /><path d="M3 19.5c.6-3.3 3-5 6-5s5.4 1.7 6 5" /><circle cx="17" cy="9" r="2.5" /><path d="M16 14.6c2.4.2 4.3 1.6 4.8 4.4" /></svg>
+      </button>
       <button id="btnKaraoke" class="tool-btn" title="Karaokê (tira a voz e liga o microfone)" aria-label="Karaokê">
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" /></svg>
       </button>
@@ -218,6 +226,7 @@
       <label class="row-label">Fundo do player</label>
       <div class="seg" id="segBg">
         <button data-v="dynamic">Capa da música</button>
+        <button data-v="clip">Clipe</button>
         <button data-v="custom">Wallpaper</button>
         <button data-v="transparent">Transparente</button>
       </div>
@@ -228,6 +237,14 @@
       <div class="row toggle-row">
         <span>Reagir ao som <small class="muted">(fundo, relógio e capa pulsam com o grave)</small></span>
         <button class="switch" id="swVisualizer" role="switch"></button>
+      </div>
+      <div class="row toggle-row">
+        <span>Partículas no fundo</span>
+        <button class="switch" id="swParticles" role="switch"></button>
+      </div>
+      <div class="row toggle-row">
+        <span>Efeitos no drop <small class="muted">(a tela pisca, treme e a capa explode)</small></span>
+        <button class="switch" id="swDropFx" role="switch"></button>
       </div>
 
       <label class="row-label">Wallpapers</label>
@@ -368,6 +385,50 @@
     </div>
   </section>
 
+  <!-- ===== Ouvir junto ===== -->
+  <section id="partyPanel" class="glass panel" hidden>
+    <div class="panel-head">
+      <h2>Ouvir junto</h2>
+      <button id="partyClose" class="win-btn" aria-label="Fechar"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+    </div>
+    <label class="row-label">Seu nome na sala</label>
+    <input id="partyName" class="text-in" maxlength="24" placeholder="Como os amigos vão te ver" />
+    <div id="partyOut">
+      <p class="hint">Crie uma sala e mande o código: o que você tocar toca no app dos seus amigos, no mesmo segundo. Cada um ouve no próprio PC.</p>
+      <button id="partyCreate" class="btn primary wide">Criar sala</button>
+      <label class="row-label">Ou entre numa sala</label>
+      <div class="join-row">
+        <input id="partyJoinCode" class="text-in" placeholder="XXXX-XXXX-XXXX-XXXX" spellcheck="false" autocomplete="off" />
+        <button id="partyJoinBtn" class="btn">Entrar</button>
+      </div>
+      <p class="hint">As mensagens da sala vão criptografadas: só quem tem o código consegue ler.</p>
+    </div>
+    <div id="partyIn" hidden>
+      <div class="party-code"><span id="partyDot" class="dot on"></span><b id="partyCode"></b><button id="partyCopy" class="btn">Copiar</button></div>
+      <p class="hint" id="partyRole"></p>
+      <label class="row-label">Na sala</label>
+      <ul id="partyMembers" class="party-members"></ul>
+      <div id="partyGuestOpts">
+        <label class="row-label">Tocar no</label>
+        <div class="seg" id="segPartyMode">
+          <button data-v="harle">Harle Player</button>
+          <button data-v="spotify">Meu Spotify (beta)</button>
+        </div>
+        <p class="hint">No Spotify conta pro seu Wrapped, mas é experimental: o app abre a música lá e tenta acertar o ponto. Pra pedir uma música, clique direito num resultado da busca → <b>Pedir pra sala</b>.</p>
+      </div>
+      <div id="partyReqs" hidden>
+        <label class="row-label">Pedidos</label>
+        <ul id="partyReqList" class="party-reqs"></ul>
+      </div>
+      <label class="row-label">Reagir</label>
+      <div id="partyReacts" class="reacts">
+        <button data-e="🔥">🔥</button><button data-e="❤️">❤️</button><button data-e="😂">😂</button><button data-e="👏">👏</button><button data-e="🕺">🕺</button><button data-e="😭">😭</button>
+      </div>
+      <button id="partyLeave" class="btn wide danger">Sair da sala</button>
+    </div>
+  </section>
+  <div id="reactLayer" aria-hidden="true"></div>
+
   <!-- ===== Karaokê ===== -->
   <section id="karaokeBar" class="glass" hidden>
     <div class="k-title"><b>🎤 Karaokê</b><button id="kExit" class="win-btn" aria-label="Sair do karaokê"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button></div>
@@ -404,13 +465,17 @@
     <div id="wrBody"></div>
     <div class="wr-foot">
       <span class="muted">Fica salvo só neste PC.</span>
-      <button id="wrShare" class="btn primary">Gerar imagem pra postar</button>
+      <span class="wr-actions">
+        <button id="wrShare" class="btn">Gerar imagem</button>
+        <button id="wrVideo" class="btn primary">🎬 Gerar vídeo</button>
+      </span>
     </div>
   </section>
 
   <div id="shareModal" hidden>
     <div class="share-box glass">
       <canvas id="shareCanvas" width="1080" height="1920"></canvas>
+      <p id="shareStatus" class="share-status"></p>
       <div class="share-actions">
         <button id="shareSave" class="btn primary">Salvar imagem</button>
         <button id="shareCopy" class="btn">Copiar</button>

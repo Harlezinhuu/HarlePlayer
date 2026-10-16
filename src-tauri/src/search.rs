@@ -624,9 +624,7 @@ mod soundcloud {
     }
 
     /// Página da busca completa: 30 por vez, até ~300 resultados.
-    /// kind: "tracks" | "artists" | "videos" (clipes)
-    pub fn page(q: &str, kind: &str, cursor: Option<&str>) -> Result<SearchPage, String> {
-        let artists = kind == "artists";
+    pub fn page(q: &str, artists: bool, cursor: Option<&str>) -> Result<SearchPage, String> {
         const LIMIT: u32 = 30;
         let offset: u32 = cursor.and_then(|c| c.parse().ok()).unwrap_or(0);
         let path = if artists { "search/users" } else { "search/tracks" };
@@ -738,7 +736,9 @@ mod ytmusic {
     }
 
     /// Página da busca completa (filtrada em músicas ou artistas), com continuação.
-    pub fn page(q: &str, artists: bool, cursor: Option<&str>) -> Result<SearchPage, String> {
+    /// kind: "tracks" | "artists" | "videos" (clipes)
+    pub fn page(q: &str, kind: &str, cursor: Option<&str>) -> Result<SearchPage, String> {
+        let artists = kind == "artists";
         let base = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false";
         let v = match cursor {
             Some(c) => post(&format!("{base}&ctoken={0}&continuation={0}&type=next", enc(c)), &json!({ "context": context() }))?,
