@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Permissões da janela principal",
-  "windows": ["main", "wallpaper", "mini", "notify"],
+  "windows": ["main", "wallpaper", "mini", "notify", "lyricsbar"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

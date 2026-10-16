@@ -3,11 +3,13 @@
 
 mod detect;
 mod discord;
+mod ducking;
 mod hotkeys;
 mod media;
 mod mini;
 mod net;
 mod notify;
+mod overlay;
 mod remote;
 mod search;
 mod updater;
@@ -242,6 +244,49 @@ fn notify_last() -> Option<serde_json::Value> {
     notify::last()
 }
 
+/// Liga/desliga a escuta da voz no Discord (pra abaixar a música).
+#[tauri::command]
+fn set_ducking(app: AppHandle, on: bool) {
+    ducking::set(&app, on);
+}
+
+/// Mostra/esconde a letra flutuante.
+#[tauri::command]
+async fn set_lyricsbar(app: AppHandle, on: bool) -> Result<bool, String> {
+    overlay::set(&app, on)
+}
+
+/// Salva a gravação do karaokê em Músicas\Harle Player e mostra no Explorer.
+#[tauri::command]
+fn save_audio(name: String, data_base64: String) -> Result<String, String> {
+    use base64::Engine;
+    let b64 = data_base64.split_once("base64,").map(|x| x.1).unwrap_or(&data_base64);
+    let bytes = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| e.to_string())?;
+    let ext = if bytes.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
+        "webm"
+    } else if bytes.starts_with(b"OggS") {
+        "ogg"
+    } else if bytes.len() > 8 && &bytes[4..8] == b"ftyp" {
+        "m4a"
+    } else {
+        return Err("Áudio inválido".into());
+    };
+    let safe: String = name.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').take(60).collect();
+    let home = std::env::var_os("USERPROFILE").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let dir = home.join("Music").join("Harle Player");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(format!("{}.{ext}", if safe.is_empty() { "karaoke".into() } else { safe }));
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("explorer")
+            .raw_arg(format!("/select,\"{}\"", path.display()))
+            .spawn();
+    }
+    Ok(path.display().to_string())
+}
+
 /// Atualiza o "Ouvindo …" no perfil do Discord.
 #[tauri::command]
 fn discord_set(presence: discord::Presence) {
@@ -417,6 +462,9 @@ fn main() {
             youtube_audio,
             check_update,
             install_update,
+            set_ducking,
+            set_lyricsbar,
+            save_audio,
             set_hotkeys,
             notify_show,
             notify_last,

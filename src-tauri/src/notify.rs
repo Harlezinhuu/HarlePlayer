@@ -62,7 +62,7 @@ pub fn show(app: &AppHandle, payload: Value) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-mod imp {
+pub(crate) mod imp {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_SHOWNOACTIVATE,
     };
@@ -79,7 +79,7 @@ mod imp {
 }
 
 #[cfg(not(windows))]
-mod imp {
+pub(crate) mod imp {
     pub fn show_no_activate(w: &tauri::WebviewWindow) {
         let _ = w.show();
     }

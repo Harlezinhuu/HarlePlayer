@@ -69,7 +69,7 @@ pub fn pretty(stem: &str) -> String {
 }
 
 #[cfg(windows)]
-mod imp {
+pub(crate) mod imp {
     use super::{pretty, process_stems, VolumeInfo};
     use windows::core::{Interface, PWSTR};
     use windows::Win32::Foundation::CloseHandle;
@@ -83,7 +83,7 @@ mod imp {
         OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
     };
 
-    fn process_stem(pid: u32) -> Option<String> {
+    pub(crate) fn process_stem(pid: u32) -> Option<String> {
         if pid == 0 {
             return None;
         }

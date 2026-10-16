@@ -12,6 +12,7 @@ pub const KEYS: &[(i32, &str, &str)] = &[
     (4, "volup", "Ctrl+Alt+↑"),
     (5, "voldown", "Ctrl+Alt+↓"),
     (6, "mini", "Ctrl+Alt+M"),
+    (7, "lyricsbar", "Ctrl+Alt+L"),
 ];
 
 pub fn action_for(id: i32) -> Option<&'static str> {
@@ -43,6 +44,7 @@ mod imp {
             3 => VK_LEFT,
             4 => VK_UP,
             5 => VK_DOWN,
+            7 => 0x4C, // L
             _ => 0x4D, // M
         }) as u32
     }
