@@ -107,11 +107,16 @@ mod tests {
     #[test]
     #[ignore = "usa a internet"]
     fn ao_vivo_sala() {
-        let topic = format!("harle-teste-{}", std::process::id());
-        publish(&topic, "ola-sala").expect("Sala: não publicou");
-        let t = ureq::get(&format!("{BASE}/{topic}/json?poll=1&since=1m")).call().expect("Sala: não leu").into_string().unwrap();
+        let topic = format!("harle-teste-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+        let r = ureq::post(&format!("{BASE}/{topic}")).set("User-Agent", "HarlePlayer").send_string("ola-sala");
+        match r {
+            Ok(resp) => println!("Sala ntfy: publicou {}", resp.into_string().unwrap_or_default().chars().take(200).collect::<String>()),
+            Err(e) => panic!("Sala: não publicou: {e}"),
+        }
+        std::thread::sleep(Duration::from_millis(800));
+        let t = ureq::get(&format!("{BASE}/{topic}/json?poll=1&since=all")).set("User-Agent", "HarlePlayer").call().expect("Sala: não leu").into_string().unwrap();
+        println!("Sala ntfy: leu {}", t.chars().take(300).collect::<String>().replace('\n', " | "));
         let got: Vec<String> = t.lines().filter_map(message_of).collect();
-        println!("Sala ntfy: recebeu {:?}", got);
         assert!(got.iter().any(|m| m == "ola-sala"));
     }
 }

@@ -3560,7 +3560,7 @@ async function partyApplyHost() {
     if (settings.partyMode === "spotify") await partyOpenInSpotify(st);
     else await partyPlayHere(st);
     // espera a música começar e pula pro mesmo ponto do anfitrião
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < (settings.partyMode === "spotify" ? 120 : 40); i++) {
       await new Promise((r) => setTimeout(r, 500));
       if (Party.sameSong({ title: media.title, artist: media.artist }, st.track) && media.playing) {
         control("seek", Party.expectedPosition(party.hostState || st));
@@ -3586,17 +3586,13 @@ async function partyPlayHere(st) {
     toast(String(e));
   }
 }
-/** Experimental: acha a música no Spotify (Deezer → song.link) e abre no app do Spotify. */
+/** Experimental: abre a busca da música no app do Spotify (conta pro seu Wrapped).
+ *  O Spotify não deixa dar o play sozinho de fora, então você clica na primeira;
+ *  assim que ela começar, o app acerta o ponto com o anfitrião. */
 async function partyOpenInSpotify(st) {
   try {
-    const d = await httpJson(`https://api.deezer.com/search?q=${enc(`${cleanTitle(st.track.title)} ${cleanArtist(st.track.artist)}`)}&limit=1`);
-    const link = d?.data?.[0]?.link;
-    if (!link) throw new Error("não achei no catálogo");
-    const sl = await httpJson(`https://api.song.link/v1-alpha.1/links?url=${enc(link)}&userCountry=BR`);
-    const uri = sl?.linksByPlatform?.spotify?.nativeAppUriDesktop;
-    if (!uri) throw new Error("não está no Spotify");
-    await api.invoke("open_url", { url: uri });
-    setTimeout(() => !media.playing && control("toggle"), 2500);
+    await api.invoke("open_url", { url: `spotify:search:${enc(`${cleanTitle(st.track.title)} ${cleanArtist(st.track.artist)}`.trim())}` });
+    toast(`Abri "${st.track.title}" no Spotify: dá o play na primeira 🎧`, 5000);
   } catch (e) {
     toast(`Spotify: ${e?.message || e}. Tocando aqui no app.`, 3500);
     return partyPlayHere(st);
