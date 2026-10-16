@@ -8,7 +8,8 @@ const USER_AGENT: &str = "HarlePlayer/0.1 (https://github.com/Harlezinhuu/HarleP
 /// APIs públicas e sem chave usadas pelo app:
 /// - lrclib.net  → letras sincronizadas
 /// - api.deezer.com → busca de músicas/artistas com capas
-const ALLOWED_HTTP: &[&str] = &["https://lrclib.net/api/", "https://api.deezer.com/"];
+/// - api.song.link → mesma música em outros serviços (ouvir junto)
+const ALLOWED_HTTP: &[&str] = &["https://lrclib.net/api/", "https://api.deezer.com/", "https://api.song.link/"];
 
 pub fn get_text(url: &str) -> Result<String, String> {
     if !ALLOWED_HTTP.iter().any(|p| url.starts_with(p)) {
@@ -60,5 +61,23 @@ pub fn open_url(url: &str) -> Result<(), String> {
             .spawn()
             .map(|_| ())
             .map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_song_link() {
+        // acha Lucid Dreams no Deezer e pede os links nos outros serviços
+        let d = super::get_text("https://api.deezer.com/search?q=juice%20wrld%20lucid%20dreams&limit=1").expect("deezer falhou");
+        let dv: serde_json::Value = serde_json::from_str(&d).unwrap();
+        let link = dv["data"][0]["link"].as_str().expect("deezer sem resultado").replace(":", "%3A").replace("/", "%2F");
+        let t = super::get_text(&format!("https://api.song.link/v1-alpha.1/links?url={link}&userCountry=BR"))
+            .expect("song.link falhou");
+        let v: serde_json::Value = serde_json::from_str(&t).unwrap();
+        let sp = v["linksByPlatform"]["spotify"]["nativeAppUriDesktop"].as_str().unwrap_or("");
+        println!("song.link: spotify={sp} youtube={}", v["linksByPlatform"]["youtube"]["url"].as_str().unwrap_or("-"));
+        assert!(sp.starts_with("spotify:track:"));
     }
 }

@@ -10,6 +10,7 @@ mod mini;
 mod net;
 mod notify;
 mod overlay;
+mod party;
 mod remote;
 mod search;
 mod updater;
@@ -287,6 +288,53 @@ fn save_audio(name: String, data_base64: String) -> Result<String, String> {
     Ok(path.display().to_string())
 }
 
+/// Ouvir junto: entra numa sala (escuta) / sai / manda mensagem.
+#[tauri::command]
+fn party_join(app: AppHandle, topic: String) -> Result<(), String> {
+    party::join(&app, &topic)
+}
+
+#[tauri::command]
+fn party_leave() {
+    party::leave();
+}
+
+#[tauri::command]
+async fn party_send(topic: String, body: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || party::publish(&topic, &body))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Salva o vídeo da retrospectiva em Vídeos\Harle Player e mostra no Explorer.
+#[tauri::command]
+fn save_video(name: String, data_base64: String) -> Result<String, String> {
+    use base64::Engine;
+    let b64 = data_base64.split_once("base64,").map(|x| x.1).unwrap_or(&data_base64);
+    let bytes = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| e.to_string())?;
+    let ext = if bytes.len() > 8 && &bytes[4..8] == b"ftyp" {
+        "mp4"
+    } else if bytes.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
+        "webm"
+    } else {
+        return Err("Vídeo inválido".into());
+    };
+    let safe: String = name.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').take(60).collect();
+    let home = std::env::var_os("USERPROFILE").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let dir = home.join("Videos").join("Harle Player");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(format!("{}.{ext}", if safe.is_empty() { "retrospectiva".into() } else { safe }));
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("explorer")
+            .raw_arg(format!("/select,\"{}\"", path.display()))
+            .spawn();
+    }
+    Ok(path.display().to_string())
+}
+
 /// Atualiza o "Ouvindo …" no perfil do Discord.
 #[tauri::command]
 fn discord_set(presence: discord::Presence) {
@@ -462,6 +510,10 @@ fn main() {
             youtube_audio,
             check_update,
             install_update,
+            party_join,
+            party_leave,
+            party_send,
+            save_video,
             set_ducking,
             set_lyricsbar,
             save_audio,

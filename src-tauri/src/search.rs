@@ -64,7 +64,7 @@ pub fn search_page(service: &str, query: &str, kind: &str, cursor: Option<&str>)
     let artists = kind == "artists";
     match service {
         "soundcloud" => soundcloud::page(q, artists, cursor),
-        "ytmusic" => ytmusic::page(q, artists, cursor),
+        "ytmusic" => ytmusic::page(q, kind, cursor),
         other => Err(format!("Busca não disponível para {other}")),
     }
 }
@@ -624,7 +624,9 @@ mod soundcloud {
     }
 
     /// Página da busca completa: 30 por vez, até ~300 resultados.
-    pub fn page(q: &str, artists: bool, cursor: Option<&str>) -> Result<SearchPage, String> {
+    /// kind: "tracks" | "artists" | "videos" (clipes)
+    pub fn page(q: &str, kind: &str, cursor: Option<&str>) -> Result<SearchPage, String> {
+        let artists = kind == "artists";
         const LIMIT: u32 = 30;
         let offset: u32 = cursor.and_then(|c| c.parse().ok()).unwrap_or(0);
         let path = if artists { "search/users" } else { "search/tracks" };
@@ -708,6 +710,7 @@ mod ytmusic {
     /// Filtros da busca (os mesmos que o site usa nas abas "Músicas" e "Artistas").
     const FILTER_SONGS: &str = "EgWKAQIIAWoMEA4QChADEAQQCRAF";
     const FILTER_ARTISTS: &str = "EgWKAQIgAWoMEA4QChADEAQQCRAF";
+    const FILTER_VIDEOS: &str = "EgWKAQIQAWoMEA4QChADEAQQCRAF";
 
     fn post(url: &str, body: &Value) -> Result<Value, String> {
         let resp = ureq::post(url)
@@ -742,7 +745,7 @@ mod ytmusic {
             None => post(base, &json!({
                 "context": context(),
                 "query": q,
-                "params": if artists { FILTER_ARTISTS } else { FILTER_SONGS },
+                "params": match kind { "artists" => FILTER_ARTISTS, "videos" => FILTER_VIDEOS, _ => FILTER_SONGS },
             }))?,
         };
         Ok(page_from(&v, artists))
@@ -1200,6 +1203,16 @@ mod tests {
         assert!(!r.tracks.is_empty());
         assert!(r.tracks[0].url.starts_with("https://soundcloud.com/"));
         assert!(!r.artists.is_empty());
+    }
+
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_clipe() {
+        let p = search_page("ytmusic", "Juice WRLD Lucid Dreams", "videos", None).expect("busca de clipes falhou");
+        println!("Clipe: {} vídeos, 1º: {} — {}", p.tracks.len(), p.tracks.first().map(|t| t.title.as_str()).unwrap_or("-"),
+            p.tracks.first().map(|t| t.url.as_str()).unwrap_or("-"));
+        assert!(!p.tracks.is_empty(), "nenhum clipe");
+        assert!(p.tracks[0].url.contains("watch?v="));
     }
 
     #[test]
