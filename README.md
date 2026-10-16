@@ -138,7 +138,7 @@ O `npm run demo` abre o front no navegador com músicas, letra e busca de exempl
 │ stats.js   retrospectiva (puras)     │        │ ytdlp.rs     reserva do YouTube                       │
 │ lib.js     letra, cores, títulos     │        │ volume.rs    volume por app (WASAPI)                  │
 │ mini.js    mini player               │        │ visualizer.rs graves do som do PC (WASAPI)            │
-│ karaoke.js microfone, efeitos, gravar │        │ discord.rs   Rich Presence (named pipe)               │
+│ karaoke.js microfone, efeitos, gravar│        │ discord.rs   Rich Presence (named pipe)               │
 │ remote.html controle pelo celular    │        │ wallpaper.rs janela na camada WorkerW                 │
 │ qr.js      QR code (sem biblioteca)  │        │ mini.rs      janelinha sempre por cima                │
 │                                      │        │ remote.rs    servidor HTTP na rede local (celular)    │
