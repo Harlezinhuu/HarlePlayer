@@ -5,6 +5,7 @@
 import { createPlayer, EQ_FREQS } from "./player.js";
 import * as Stats from "./stats.js";
 import { drawQr } from "./qr.js";
+import { createKaraoke } from "./karaoke.js";
 import { fmt, esc, rgbToHsl, hslToRgb, slotOf, cleanTitle, cleanArtist, lyricVariants, parseLrc, isPlaceholderTitle } from "./lib.js";
 
 const $ = (s) => document.querySelector(s);
@@ -67,6 +68,12 @@ const DEFAULTS = {
   eqGains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   notify: true, // aviso de música nova no canto da tela
   autoMini: true, // abre o mini player ao minimizar
+  ducking: true, // abaixa a música quando alguém fala no Discord
+  duckLevel: 0.3, // pra quanto abaixa (fração do volume)
+  lyricsbar: false, // letra flutuante na parte de baixo da tela
+  dj: false, // DJ com voz entre as músicas
+  djEvery: "some", // "all" | "some"
+  djVoice: "",
   clock24: true,
   clockStyle: "solid", // solid | thin | outline
   wallpaperMode: false, // wallpaper animado atrás dos ícones
@@ -1415,6 +1422,7 @@ function frame() {
     if (settings.lyricsMode === "chunks") showChunk(currentChunk(p));
     else showLine(currentLine(p), p);
   }
+  feedLyricsBar(pos + settings.lyricsOffset * 1000);
 }
 
 // ===================================================================
@@ -2432,6 +2440,8 @@ function onMedia(s, fromLocal = false) {
     upsertHistory(s);
     loadLyrics(s);
     scheduleNotify(k);
+    djOnTrack(k);
+    if (kOn) setTimeout(renderKaraoke, 300);
   } else if (k && s.thumb && s.thumb !== lastThumb) {
     updateArt(s.thumb);
     upsertHistory(s);
@@ -2843,6 +2853,316 @@ $("#swNotify").addEventListener("click", () => {
 });
 
 // ===================================================================
+// Abaixar a música (alguém falando no Discord, DJ falando)
+// ===================================================================
+const duckReasons = new Map(); // motivo → fração (0–1)
+let duckSaved = null; // { source, level } do app de fora antes de abaixar
+let duckTimer = 0;
+async function setDuckReason(reason, factor) {
+  if (factor == null || factor >= 1) duckReasons.delete(reason);
+  else duckReasons.set(reason, factor);
+  const f = Math.min(1, ...duckReasons.values());
+  // player interno: abaixa direto no som dele (suave, sem estalo)
+  player?.setDuck(isLocalVol() ? f : 1);
+  if (isLocalVol()) return;
+  // app de fora (Spotify…): mexe no volume dele no mixer e devolve depois
+  const source = media.available ? media.source || "" : "";
+  clearTimeout(duckTimer);
+  if (f < 1) {
+    if (!duckSaved || duckSaved.source !== source) {
+      try {
+        const v = await api.invoke("get_volume", { source });
+        if (!v || v.target === "Sistema") return; // não mexe no volume do PC inteiro
+        duckSaved = { source, level: v.level };
+      } catch {
+        return;
+      }
+    }
+    fadeAppVolume(source, duckSaved.level * f);
+  } else if (duckSaved) {
+    const back = duckSaved;
+    duckSaved = null;
+    duckTimer = setTimeout(() => fadeAppVolume(back.source, back.level), 150);
+  }
+}
+async function fadeAppVolume(source, target, steps = 5) {
+  let from = target;
+  try { from = (await api.invoke("get_volume", { source }))?.level ?? target; } catch {}
+  for (let i = 1; i <= steps; i++) {
+    const lv = from + ((target - from) * i) / steps;
+    try { await api.invoke("set_volume", { source, level: lv }); } catch { return; }
+    await new Promise((r) => setTimeout(r, 45));
+  }
+}
+api.listen("voice-activity", (talking) => {
+  if (!settings.ducking) return;
+  setDuckReason("discord", talking ? settings.duckLevel : 1);
+  document.body.classList.toggle("voice-ducked", !!talking);
+});
+function setDucking(on) {
+  settings.ducking = on;
+  saveSettings();
+  api.invoke("set_ducking", { on }).catch(() => {});
+  if (!on) setDuckReason("discord", 1);
+  renderExtras();
+}
+
+// ===================================================================
+// Letra flutuante (faixa na parte de baixo da tela, por cima de tudo)
+// ===================================================================
+let barSig = "";
+let barPlaying = null;
+function feedLyricsBar(pos) {
+  if (!settings.lyricsbar || IS_WALLPAPER || !api.emit) return;
+  const line = lyrics && lyrics.key === keyOf(media) ? (() => {
+    const L = lyrics.lines;
+    let idx = -1;
+    for (let i = 0; i < L.length; i++) if (L[i].t <= pos) idx = i; else break;
+    return idx >= 0 ? { ...L[idx], idx, next: L[idx + 1]?.text || "" } : null;
+  })() : null;
+  const text = line && pos <= line.end + 400 ? line.text : "";
+  const sig = `${keyOf(media)}|${line?.idx}|${text}`;
+  const playing = !!media.playing;
+  if (sig === barSig && playing === barPlaying) return;
+  const restart = sig === barSig; // só mudou play/pause: recalcula a varrida
+  barSig = sig;
+  barPlaying = playing;
+  api.emit("hp-lyric", {
+    text, next: text ? line.next : "", start: line?.t || 0, end: line?.end || 0, pos, playing, restart,
+    font: settings.lyricFont,
+  }).catch?.(() => {});
+}
+async function setLyricsBar(on) {
+  settings.lyricsbar = on;
+  saveSettings();
+  try {
+    await api.invoke("set_lyricsbar", { on });
+    barSig = "";
+  } catch (e) {
+    toast(String(e));
+  }
+  renderExtras();
+  if (on && !settings.lyrics) toast("Ligue as letras sincronizadas pra ela aparecer");
+}
+
+// ===================================================================
+// DJ com voz: anuncia a música entre uma e outra, tipo rádio
+// ===================================================================
+let djCount = 0;
+let djLastArtist = "";
+let djArtistRun = 0;
+let djTimer = 0;
+function djVoices() {
+  const all = window.speechSynthesis?.getVoices?.() || [];
+  const pt = all.filter((v) => /^pt(-|_)?BR/i.test(v.lang) || /portugu/i.test(v.name));
+  // prefere vozes "Natural"/"Online" (bem mais humanas), depois qualquer pt-BR
+  return pt.sort((a, b) => /natural|online/i.test(b.name) - /natural|online/i.test(a.name));
+}
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+function djLine() {
+  const title = cleanTitle(media.title || "");
+  const artist = cleanArtist(media.artist || "") || "artista desconhecido";
+  const key = keyOf(media);
+  const week = Stats.summarize(stats, Stats.periodRange("7d").from);
+  const t = week.tracks.find((x) => x.key === key);
+  const a = week.artists.find((x) => x.name.toLowerCase() === Stats.mainArtist(media.artist || "").toLowerCase());
+  const h = new Date().getHours();
+  const greet = h < 5 ? "Madrugada adentro" : h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+  const lines = [];
+  if (djCount === 0) lines.push(`${greet}! Começando com ${title}, de ${artist}.`);
+  if (djArtistRun >= 2) lines.push(`${artist} de novo! Já é a ${djArtistRun + 1}ª seguida, hein.`);
+  if (t && t.plays >= 3) lines.push(`${title}, de ${artist}. Essa é a ${t.plays + 1}ª vez que você ouve essa só essa semana.`);
+  if (!t) lines.push(pick([`Agora uma que ainda não tinha tocado essa semana: ${title}, de ${artist}.`, `Novidade na área: ${title}, de ${artist}.`]));
+  if (a && a.sec > 1800) lines.push(`${artist}, que já te fez companhia por ${Math.round(a.sec / 60)} minutos essa semana. Toca aí: ${title}.`);
+  lines.push(pick([`Agora: ${title}, de ${artist}.`, `Na sequência, ${artist}, com ${title}.`, `Tocando agora no Harle Player: ${title}, de ${artist}.`, `Aumenta aí, que é ${title}, de ${artist}.`]));
+  return lines[0];
+}
+function djSpeak(text) {
+  const synth = window.speechSynthesis;
+  if (!synth || !text) return;
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const v = djVoices().find((x) => x.name === settings.djVoice) || djVoices()[0];
+  if (v) u.voice = v;
+  u.lang = v?.lang || "pt-BR";
+  u.rate = 1.04;
+  u.onstart = () => setDuckReason("dj", 0.28);
+  const done = () => setDuckReason("dj", 1);
+  u.onend = done;
+  u.onerror = done;
+  synth.speak(u);
+}
+function djOnTrack(key) {
+  if (!settings.dj || IS_WALLPAPER) return;
+  clearTimeout(djTimer);
+  window.speechSynthesis?.cancel();
+  const artist = Stats.mainArtist(media.artist || "").toLowerCase();
+  djArtistRun = artist && artist === djLastArtist ? djArtistRun + 1 : 0;
+  djLastArtist = artist;
+  const speak = settings.djEvery === "all" || djCount === 0 || djArtistRun >= 2 || Math.random() < 0.4;
+  djTimer = setTimeout(() => {
+    if (keyOf(media) !== key || !media.playing) return;
+    if (speak) djSpeak(djLine());
+    djCount++;
+  }, 1500);
+}
+
+// ---------- configurações da aba Extras (Discord, letra flutuante, DJ) ----------
+function renderExtras() {
+  $("#swDucking").classList.toggle("on", settings.ducking);
+  $$("#segDuck button").forEach((b) => b.classList.toggle("sel", +b.dataset.v === settings.duckLevel));
+  $("#swLyricsBar").classList.toggle("on", settings.lyricsbar);
+  $("#swDj").classList.toggle("on", settings.dj);
+  $$("#segDjEvery button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.djEvery));
+  const voices = djVoices();
+  $("#djVoice").innerHTML = voices.length
+    ? voices.map((v) => `<option value="${esc(v.name)}" ${v.name === settings.djVoice ? "selected" : ""}>${esc(v.name.replace(/^Microsoft\s+/, "").replace(/\s*-\s*Portuguese.*$/i, ""))}</option>`).join("")
+    : `<option>Nenhuma voz em português instalada</option>`;
+}
+window.speechSynthesis?.addEventListener?.("voiceschanged", () => !IS_WALLPAPER && renderExtras());
+$("#swDucking").addEventListener("click", () => setDucking(!settings.ducking));
+$("#segDuck").addEventListener("click", (e) => {
+  if (!e.target.dataset.v) return;
+  settings.duckLevel = +e.target.dataset.v;
+  saveSettings();
+  renderExtras();
+});
+$("#swLyricsBar").addEventListener("click", () => setLyricsBar(!settings.lyricsbar));
+$("#swDj").addEventListener("click", () => {
+  settings.dj = !settings.dj;
+  saveSettings();
+  renderExtras();
+  if (settings.dj) djSpeak("Fala! Eu sou o DJ do Harle Player. Vou aparecendo entre as músicas.");
+  else window.speechSynthesis?.cancel();
+});
+$("#segDjEvery").addEventListener("click", (e) => {
+  if (!e.target.dataset.v) return;
+  settings.djEvery = e.target.dataset.v;
+  saveSettings();
+  renderExtras();
+});
+$("#djVoice").addEventListener("change", (e) => {
+  settings.djVoice = e.target.value;
+  saveSettings();
+});
+$("#djTest").addEventListener("click", (e) => {
+  e.preventDefault();
+  djSpeak(keyOf(media) ? djLine() : "Testando, testando. Som na caixa!");
+});
+
+// ===================================================================
+// Karaokê: tira a voz, sua voz nos fones (com efeitos) e gravação
+// ===================================================================
+const karaoke = player ? createKaraoke(() => player.audioGraph()) : null;
+let kOn = false;
+let recTimer = 0, recStart = 0;
+const K_DEFAULTS = { voice: 0 };
+async function setKaraokeMode(on) {
+  kOn = on;
+  document.body.classList.toggle("karaoke-on", on);
+  $("#btnKaraoke").classList.toggle("on", on);
+  $("#karaokeBar").hidden = !on;
+  if (on) {
+    if (!settings.lyrics) toggleLyrics();
+    await player?.setKaraoke(true, K_DEFAULTS.voice);
+  } else {
+    if (karaoke?.recording) await stopRecording();
+    karaoke?.micStop();
+    await player?.setKaraoke(false);
+  }
+  renderKaraoke();
+}
+function renderKaraoke() {
+  if (!karaoke) return;
+  const localNow = !!(player?.active && local);
+  $("#kNotLocal").hidden = localNow || !kOn;
+  $("#kControls").hidden = !localNow;
+  if (!localNow && keyOf(media)) $("#kNotLocalText").textContent = `"${media.title}" está tocando no ${serviceName(playingService()) || "outro app"}. O karaokê só tira a voz do que toca aqui dentro.`;
+  $("#kMic").classList.toggle("on", karaoke.micOn);
+  $("#kMic").querySelector("span").textContent = karaoke.micOn ? "Microfone ligado" : "Ligar microfone";
+  for (const k of ["mic", "echo", "reverb"]) {
+    const el = $(`#k_${k}`);
+    el.value = Math.round(karaoke.levels[k] * 100);
+    el.style.setProperty("--p", `${el.value}%`);
+  }
+  const v = $("#k_voice");
+  v.value = Math.round(K_DEFAULTS.voice * 100);
+  v.style.setProperty("--p", `${v.value}%`);
+  $("#kRec").classList.toggle("on", karaoke.recording);
+}
+$("#btnKaraoke").addEventListener("click", () => setKaraokeMode(!kOn));
+$("#kExit").addEventListener("click", () => setKaraokeMode(false));
+$("#kPlayHere").addEventListener("click", () => {
+  const q = `${cleanTitle(media.title || "")} ${cleanArtist(media.artist || "")}`.trim();
+  if (media.available && media.playing && !local) control("toggle"); // pausa o app de fora
+  const prev = settings.service;
+  settings.service = prev === "soundcloud" ? "soundcloud" : "ytmusic";
+  playQuery(q); // lê o serviço na hora; depois volta o que estava escolhido
+  settings.service = prev;
+});
+$("#kMic").addEventListener("click", async () => {
+  try {
+    if (karaoke.micOn) karaoke.micStop();
+    else {
+      await karaoke.micStart();
+      toast("Microfone ligado: use fone de ouvido pra não dar microfonia 🎧", 3500);
+    }
+  } catch (e) {
+    toast(/denied|NotAllowed/i.test(String(e)) ? "O Windows não deixou usar o microfone. Libere em Configurações do Windows → Privacidade → Microfone." : `Microfone: ${e?.message || e}`, 6000);
+  }
+  renderKaraoke();
+});
+for (const k of ["mic", "echo", "reverb"]) {
+  $(`#k_${k}`).addEventListener("input", (e) => {
+    karaoke.set(k, e.target.value / 100);
+    e.target.style.setProperty("--p", `${e.target.value}%`);
+  });
+}
+$("#k_voice").addEventListener("input", (e) => {
+  K_DEFAULTS.voice = e.target.value / 100;
+  e.target.style.setProperty("--p", `${e.target.value}%`);
+  player?.setKaraoke(true, K_DEFAULTS.voice);
+});
+async function stopRecording() {
+  clearInterval(recTimer);
+  const blob = await karaoke.recStop();
+  renderKaraoke();
+  $("#kRecTime").textContent = "Gravar";
+  if (!blob || blob.size < 2000) return;
+  const name = `karaoke-${cleanTitle(media.title || "musica").replace(/[^\w-]+/g, "-").slice(0, 30)}-${Stats.dayKey(new Date())}`;
+  const data = await new Promise((r) => {
+    const fr = new FileReader();
+    fr.onload = () => r(fr.result);
+    fr.readAsDataURL(blob);
+  });
+  if (api.demo) {
+    const a = document.createElement("a");
+    a.href = data;
+    a.download = `${name}.webm`;
+    a.click();
+    return;
+  }
+  try {
+    const path = await api.invoke("save_audio", { name, dataBase64: data });
+    toast(`Gravação salva em ${path}`, 5000);
+  } catch (e) {
+    toast(`Não consegui salvar: ${e}`, 4000);
+  }
+}
+$("#kRec").addEventListener("click", async () => {
+  if (karaoke.recording) return stopRecording();
+  try {
+    karaoke.recStart();
+    recStart = Date.now();
+    recTimer = setInterval(() => ($("#kRecTime").textContent = fmt(Date.now() - recStart)), 500);
+    $("#kRecTime").textContent = "0:00";
+  } catch (e) {
+    toast(`Não deu pra gravar: ${e?.message || e}`);
+  }
+  renderKaraoke();
+});
+
+// ===================================================================
 // Controle pelo celular: o PC vira um servidorzinho na rede Wi-Fi
 // ===================================================================
 let remoteInfo = null;
@@ -2860,6 +3180,8 @@ function remoteCommand(m) {
       return stepVolume(m.action === "volup" ? 0.05 : -0.05);
     case "mini":
       return $("#btnMini").click();
+    case "lyricsbar":
+      return setLyricsBar(!settings.lyricsbar);
     case "seek":
       return Number.isFinite(m.value) && control("seek", Math.round(m.value));
     case "volume":
@@ -3058,6 +3380,11 @@ if (!IS_WALLPAPER && settings.remote) setRemote(true, true);
 if (!IS_WALLPAPER && settings.hotkeys) setHotkeys(true, true);
 if (!IS_WALLPAPER) $("#swNotify").classList.toggle("on", settings.notify);
 if (!IS_WALLPAPER) $("#swAutoMini").classList.toggle("on", settings.autoMini);
+if (!IS_WALLPAPER) {
+  renderExtras();
+  if (settings.ducking) api.invoke("set_ducking", { on: true }).catch(() => {});
+  if (settings.lyricsbar) setLyricsBar(true);
+}
 
 if (!IS_WALLPAPER) {
   setTimeout(() => checkUpdate(false), 4000);

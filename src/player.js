@@ -107,6 +107,10 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   // ---------- equalizador (WebAudio): <audio> → 10 filtros → volume → saída ----------
   let actx = null, gainNode = null, filters = [];
   let eqOn = false, eqGains = EQ_FREQS.map(() => 0);
+  let duck = 1; // abaixado (Discord falando, DJ) — 1 = normal
+  // karaokê: caminho "seco" (música normal) e caminho sem a voz do centro
+  let dryGain = null, kGain = null;
+  let karaoke = false, voiceKeep = 0;
   function ensureGraph() {
     if (actx) return;
     try {
@@ -120,8 +124,35 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
         return b;
       });
       gainNode = actx.createGain();
-      let node = src;
-      for (const f of filters) {
+      // caminho normal
+      dryGain = actx.createGain();
+      src.connect(dryGain);
+      dryGain.connect(filters[0]);
+      // caminho karaokê: L − R tira o que está no centro (quase sempre a voz);
+      // o grave (que também fica no centro) volta por um passa-baixa em 160 Hz
+      const split = actx.createChannelSplitter(2);
+      src.connect(split);
+      const inv = actx.createGain();
+      inv.gain.value = -1;
+      split.connect(inv, 1);
+      const side = actx.createGain();
+      side.gain.value = 1.35;
+      split.connect(side, 0);
+      inv.connect(side);
+      const bassSum = actx.createGain();
+      bassSum.gain.value = 0.5;
+      split.connect(bassSum, 0);
+      split.connect(bassSum, 1);
+      const lp = actx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 160;
+      bassSum.connect(lp);
+      kGain = actx.createGain();
+      side.connect(kGain);
+      lp.connect(kGain);
+      kGain.connect(filters[0]);
+      let node = filters[0];
+      for (const f of filters.slice(1)) {
         node.connect(f);
         node = f;
       }
@@ -137,10 +168,14 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     if (actx) {
       filters.forEach((f, i) => (f.gain.value = eqOn ? eqGains[i] || 0 : 0));
       audio.volume = 1;
-      gainNode.gain.value = volume * volume * (eqOn ? eqPreamp(eqGains) : 1);
+      const target = volume * volume * duck * (eqOn ? eqPreamp(eqGains) : 1);
+      gainNode.gain.setTargetAtTime(target, actx.currentTime, 0.06); // sem estalo
+      dryGain.gain.value = karaoke ? voiceKeep : 1;
+      kGain.gain.value = karaoke ? 1 - voiceKeep : 0;
     } else {
-      audio.volume = volume * volume;
+      audio.volume = volume * volume * duck;
     }
+    try { yt?.setVolume?.(Math.round(volume * volume * duck * 100)); } catch {}
   }
 
   // ---------- <audio> (SoundCloud) ----------
@@ -178,7 +213,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
           playerVars: { autoplay: 1, controls: 0, playsinline: 1, rel: 0, origin: location.origin },
           events: {
             onReady: () => {
-              yt.setVolume?.(Math.round(volume * 100));
+              yt.setVolume?.(Math.round(volume * volume * duck * 100));
               resolve();
             },
             onStateChange: (e) => {
@@ -263,6 +298,10 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
         onQueue(queueInfo());
       }
       if (cur.service === "soundcloud") await playDownloaded("soundcloud_audio", cur, my);
+      else if ((cur.service === "ytmusic" || cur.service === "youtube") && karaoke) {
+        // karaokê precisa do áudio "na mão" (o player do YouTube não deixa mexer no som)
+        await playDownloaded("youtube_audio", cur, my);
+      }
       else if (cur.service === "ytmusic" || cur.service === "youtube") {
         try {
           await playYouTube(cur, my);
@@ -413,7 +452,6 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   function setVolume(v) {
     volume = Math.min(1, Math.max(0, v));
     applyEq();
-    try { yt?.setVolume?.(Math.round(volume * volume * 100)); } catch {}
   }
 
   /** Liga/desliga o equalizador e define o ganho (dB) de cada faixa. */
@@ -424,5 +462,42 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     applyEq();
   }
 
-  return { playQueue, queue: queueApi, setVolume, setEq, toggle, next: () => next(), prev, seek, stop, state, get active() { return !!cur; } };
+  /** Abaixa (0–1) por cima do volume escolhido; 1 = normal. */
+  function setDuck(f) {
+    duck = Math.min(1, Math.max(0, f));
+    applyEq();
+  }
+
+  /** Karaokê: tira a voz. keep = quanto da voz original fica (0–1). */
+  async function setKaraoke(on, keep = voiceKeep) {
+    const was = karaoke;
+    karaoke = !!on;
+    voiceKeep = Math.min(1, Math.max(0, keep));
+    if (karaoke) ensureGraph();
+    applyEq();
+    // tocando pelo player do YouTube: troca pro áudio baixado, no mesmo ponto
+    if (karaoke && !was && engine === "yt" && cur) {
+      const at = state().positionMs;
+      const my = ++seq;
+      loading = true;
+      stopEngines();
+      emit();
+      try {
+        await playDownloaded("youtube_audio", cur, my);
+        if (my === seq) audio.currentTime = at / 1000;
+      } catch (e) {
+        loading = false;
+        toast(`Não deu pra preparar o karaokê: ${e?.message || e}`, 4500);
+      }
+      if (my === seq) emit();
+    }
+  }
+
+  /** Pro karaokê gravar e ligar o microfone no mesmo "mixer". */
+  function audioGraph() {
+    ensureGraph();
+    return actx ? { ctx: actx, out: gainNode, engine } : null;
+  }
+
+  return { playQueue, queue: queueApi, setVolume, setEq, setDuck, setKaraoke, audioGraph, toggle, next: () => next(), prev, seek, stop, state, get active() { return !!cur; } };
 }

@@ -31,6 +31,9 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Aleatório e repetir** na barra, igual o Spotify: no player interno e também no app de origem, quando ele deixa (o Windows avisa se o app aceita).
 - Teclas de mídia, tocar/pausar, próxima, anterior e barra de progresso clicável.
 
+- **Karaokê com a sua voz**: tira a voz da música (no player interno), deixa a letra grande na tela e liga o **microfone nos seus fones**, com eco e reverb de palco. Dá pra **gravar** e salvar a apresentação.
+- **DJ com voz**: entre as músicas, uma voz em português anuncia o que vai tocar, tipo rádio, usando a sua retrospectiva ("essa é a 5ª vez que você ouve essa essa semana").
+
 ### 🔎 Buscar
 - **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…).
 - **Abas Tudo · Músicas · Artistas**: os principais resultados e a lista completa, que carrega mais conforme você rola. Clicou numa música, ela toca e o resto da lista vira a fila.
@@ -56,6 +59,8 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 
 ### 🔌 Integrações
 - **Atalhos globais** que funcionam até dentro de jogo: `Ctrl+Alt+Espaço` (tocar/pausar), `Ctrl+Alt+→/←` (próxima/anterior), `Ctrl+Alt+↑/↓` (volume) e `Ctrl+Alt+M` (mini player).
+- **Abaixa a música quando alguém fala no Discord**: o app lê o volume do Discord no mixer do Windows e abaixa a música (até a do Spotify) enquanto o pessoal fala na call, voltando quando param.
+- **Letra flutuante** (`Ctrl+Alt+L`): a letra aparece como legenda na parte de baixo da tela, por cima de qualquer coisa, sem atrapalhar o clique.
 - **Aviso de música nova**: um cartão aparece no canto da tela quando a música troca (e no volume pelo atalho), sem roubar o foco do jogo.
 - **Discord Rich Presence**: "Ouvindo SoundCloud" (ou YouTube Music, YouTube…) no seu perfil, com capa, artista, barra de tempo e botão "Ouvir no …". Detecta sozinho onde a música está tocando, até no navegador.
 - **Controle pelo celular**: liga nas configurações, aponta a câmera pro QR code e o celular vira um controle (tocar, pular, volume, letra rolando, fila e busca), sem instalar nada. Funciona em Android e iPhone, na mesma rede Wi-Fi. O acesso é protegido por um código que só o QR tem.
@@ -73,7 +78,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 | `Espaço` | Tocar / pausar |
 | `/` ou `Ctrl+K` | Pesquisar |
 | `←` `→` | Girar o carrossel |
-| `Ctrl+Alt+Espaço` / `→` / `←` / `↑` / `↓` / `M` | Atalhos globais: tocar/pausar, próxima, anterior, volume, mini player |
+| `Ctrl+Alt+Espaço` / `→` / `←` / `↑` / `↓` / `M` / `L` | Atalhos globais: tocar/pausar, próxima, anterior, volume, mini player, letra flutuante |
 | `F11` (ou duplo clique no topo) | Tela cheia: depois de 3 s parado, sobra só relógio, capa e letra |
 | `Esc` | Fechar busca / configurações / sair da tela cheia |
 | Clique direito numa música | Tocar a seguir, adicionar à fila ou a uma playlist |
@@ -133,13 +138,15 @@ O `npm run demo` abre o front no navegador com músicas, letra e busca de exempl
 │ stats.js   retrospectiva (puras)     │        │ ytdlp.rs     reserva do YouTube                       │
 │ lib.js     letra, cores, títulos     │        │ volume.rs    volume por app (WASAPI)                  │
 │ mini.js    mini player               │        │ visualizer.rs graves do som do PC (WASAPI)            │
-│ remote.html controle pelo celular    │        │ discord.rs   Rich Presence (named pipe)               │
-│ qr.js      QR code (sem biblioteca)  │        │ wallpaper.rs janela na camada WorkerW                 │
-│                                      │        │ mini.rs      janelinha sempre por cima                │
-│ 3 janelas: player, wallpaper, mini   │        │ remote.rs    servidor HTTP na rede local (celular)    │
-                                                │ hotkeys.rs   atalhos globais (RegisterHotKey)         │
-                                                │ notify.rs    aviso no canto sem roubar o foco         │
-└──────────────────────────────────────┘        │ updater.rs   Releases do GitHub → instala e reabre    │
+│ karaoke.js microfone, efeitos, gravar │        │ discord.rs   Rich Presence (named pipe)               │
+│ remote.html controle pelo celular    │        │ wallpaper.rs janela na camada WorkerW                 │
+│ qr.js      QR code (sem biblioteca)  │        │ mini.rs      janelinha sempre por cima                │
+│                                      │        │ remote.rs    servidor HTTP na rede local (celular)    │
+│ janelas: player, wallpaper, mini…    │        │ hotkeys.rs   atalhos globais (RegisterHotKey)         │
+└──────────────────────────────────────┘        │ notify.rs    aviso no canto sem roubar o foco         │
+                                                │ overlay.rs   letra flutuante por cima de tudo         │
+                                                │ ducking.rs   voz no Discord → abaixar a música        │
+                                                │ updater.rs   Releases do GitHub → instala e reabre    │
                                                 └───────────────────────────────────────────────────────┘
 ```
 

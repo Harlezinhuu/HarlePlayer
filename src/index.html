@@ -137,6 +137,9 @@
       <button id="btnVolume" class="tool-btn" title="Volume (roda do mouse ajusta)" aria-label="Volume">
         <svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" class="vol-body" /><path class="vol-w1" d="M15.5 9.2a4 4 0 0 1 0 5.6" /><path class="vol-w2" d="M18 6.8a7.5 7.5 0 0 1 0 10.4" /><path class="vol-x" d="M16 9.5l5 5M21 9.5l-5 5" /></svg>
       </button>
+      <button id="btnKaraoke" class="tool-btn" title="Karaokê (tira a voz e liga o microfone)" aria-label="Karaokê">
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" /></svg>
+      </button>
       <button id="btnWrapped" class="tool-btn" title="Sua retrospectiva (o que você mais ouviu)" aria-label="Retrospectiva">
         <svg viewBox="0 0 24 24"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9" /></svg>
       </button>
@@ -282,8 +285,41 @@
         <span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>→</kbd> <kbd>←</kbd> próxima / anterior</span>
         <span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>↑</kbd> <kbd>↓</kbd> volume</span>
         <span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>M</kbd> mini player</span>
+        <span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>L</kbd> letra flutuante</span>
       </div>
       <p class="hint warn" id="hotkeysNote"></p>
+
+      <label class="row-label">Discord falando</label>
+      <div class="row toggle-row">
+        <span>Abaixar a música quando alguém fala na call</span>
+        <button class="switch" id="swDucking" role="switch"></button>
+      </div>
+      <span class="row-sub">Abaixa pra</span>
+      <div class="seg" id="segDuck">
+        <button data-v="0.15">15%</button>
+        <button data-v="0.3">30%</button>
+        <button data-v="0.5">50%</button>
+      </div>
+
+      <label class="row-label">Letra flutuante</label>
+      <div class="row toggle-row">
+        <span>Letra na parte de baixo da tela, por cima de tudo <small class="muted">(Ctrl+Alt+L)</small></span>
+        <button class="switch" id="swLyricsBar" role="switch"></button>
+      </div>
+
+      <label class="row-label">DJ com voz</label>
+      <div class="row toggle-row">
+        <span>Anuncia as músicas, tipo rádio</span>
+        <button class="switch" id="swDj" role="switch"></button>
+      </div>
+      <div class="seg" id="segDjEvery">
+        <button data-v="some">De vez em quando</button>
+        <button data-v="all">Toda música</button>
+      </div>
+      <div class="row toggle-row">
+        <select id="djVoice" class="select"></select>
+        <a href="#" id="djTest">Testar</a>
+      </div>
 
       <label class="row-label">Mini player</label>
       <div class="row toggle-row">
@@ -330,6 +366,24 @@
       <span>Criado por <b>Harle</b> · <span id="appVersion">v—</span> · <a href="#" id="btnCheckUpdate">Procurar atualização</a></span>
       <a href="#" id="lnkGithub">GitHub</a>
     </div>
+  </section>
+
+  <!-- ===== Karaokê ===== -->
+  <section id="karaokeBar" class="glass" hidden>
+    <div class="k-title"><b>🎤 Karaokê</b><button id="kExit" class="win-btn" aria-label="Sair do karaokê"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button></div>
+    <div id="kNotLocal" hidden>
+      <p id="kNotLocalText"></p>
+      <button id="kPlayHere" class="btn primary">Tocar essa aqui pelo YouTube</button>
+    </div>
+    <div id="kControls">
+      <button id="kMic" class="k-mic"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg><span>Ligar microfone</span></button>
+      <label class="k-sl"><span>Voz original</span><input type="range" class="rng" id="k_voice" min="0" max="100" /></label>
+      <label class="k-sl"><span>Seu microfone</span><input type="range" class="rng" id="k_mic" min="0" max="150" /></label>
+      <label class="k-sl"><span>Eco</span><input type="range" class="rng" id="k_echo" min="0" max="100" /></label>
+      <label class="k-sl"><span>Reverb (palco)</span><input type="range" class="rng" id="k_reverb" min="0" max="100" /></label>
+      <button id="kRec" class="k-rec"><i></i><span id="kRecTime">Gravar</span></button>
+    </div>
+    <p class="k-hint">Use fone de ouvido 🎧 · a voz sai melhor em músicas com o vocal no centro</p>
   </section>
 
   <!-- ===== Retrospectiva ("seu Wrapped") ===== -->
