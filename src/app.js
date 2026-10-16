@@ -1771,7 +1771,7 @@ async function loadFull(reset = false) {
   if (!q || kind === "all") return;
   if (reset || full.q !== q || full.kind !== kind || full.svc !== svc) {
     Object.assign(full, { q, kind, svc, items: [], next: null, loading: false, done: false, seq: full.seq + 1, source: "", error: "" });
-    renderFull();
+    $("#fullList").innerHTML = ""; // limpa sem mostrar "Nada encontrado" antes de buscar
   }
   if (full.loading || full.done) return;
   full.loading = true;
@@ -1782,7 +1782,10 @@ async function loadFull(reset = false) {
     let page;
     if (NATIVE_SEARCH[svc] && full.source !== "deezer") {
       try {
-        page = await api.invoke("search_page", { service: NATIVE_SEARCH[svc], query: q, kind, cursor: full.next });
+        page = await Promise.race([
+          api.invoke("search_page", { service: NATIVE_SEARCH[svc], query: q, kind, cursor: full.next }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("demorou demais (15 s)")), 15000)),
+        ]);
         if (!page) throw new Error("sem resposta");
       } catch (e) {
         if (full.items.length) throw e; // no meio da lista: só mostra o erro
@@ -1840,6 +1843,7 @@ function renderFull() {
       })
       .join("");
   }
+  if (!full.items.length && full.loading) list.innerHTML = "";
   if (!full.items.length && !full.loading) {
     list.innerHTML = full.error
       ? `<div class="res-empty">Não deu pra buscar: ${esc(full.error)}</div>`

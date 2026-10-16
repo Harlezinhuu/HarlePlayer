@@ -177,7 +177,7 @@ async fn image_bytes(url: String) -> Result<tauri::ipc::Response, String> {
 
 /// Salva o card do Wrapped em Imagens\Harle Player e mostra no Explorer.
 #[tauri::command]
-fn save_image(name: String, data_base64: String) -> Result<String, String> {
+async fn save_image(name: String, data_base64: String) -> Result<String, String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data_base64.trim_start_matches("data:image/png;base64,"))
@@ -203,7 +203,7 @@ fn save_image(name: String, data_base64: String) -> Result<String, String> {
 
 /// Controle pelo celular: liga o servidor na rede local e devolve o link do QR.
 #[tauri::command]
-fn remote_start(app: AppHandle) -> Result<remote::RemoteInfo, String> {
+async fn remote_start(app: AppHandle) -> Result<remote::RemoteInfo, String> {
     remote::start(&app)
 }
 
@@ -213,7 +213,7 @@ fn remote_stop() {
 }
 
 #[tauri::command]
-fn remote_new_code() -> Result<remote::RemoteInfo, String> {
+async fn remote_new_code() -> Result<remote::RemoteInfo, String> {
     remote::regenerate()
 }
 
@@ -230,13 +230,13 @@ fn remote_lyrics(lyrics: serde_json::Value) {
 
 /// Liga/desliga os atalhos globais; devolve os que outro programa já usa.
 #[tauri::command]
-fn set_hotkeys(app: AppHandle, on: bool) -> Result<Vec<String>, String> {
+async fn set_hotkeys(app: AppHandle, on: bool) -> Result<Vec<String>, String> {
     hotkeys::set(&app, on)
 }
 
 /// Mostra o aviso de música nova no canto da tela.
 #[tauri::command]
-fn notify_show(app: AppHandle, payload: serde_json::Value) -> Result<(), String> {
+async fn notify_show(app: AppHandle, payload: serde_json::Value) -> Result<(), String> {
     notify::show(&app, payload)
 }
 
@@ -259,7 +259,7 @@ async fn set_lyricsbar(app: AppHandle, on: bool) -> Result<bool, String> {
 
 /// Salva a gravação do karaokê em Músicas\Harle Player e mostra no Explorer.
 #[tauri::command]
-fn save_audio(name: String, data_base64: String) -> Result<String, String> {
+async fn save_audio(name: String, data_base64: String) -> Result<String, String> {
     use base64::Engine;
     let b64 = data_base64.split_once("base64,").map(|x| x.1).unwrap_or(&data_base64);
     let bytes = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| e.to_string())?;
@@ -308,7 +308,7 @@ async fn party_send(topic: String, body: String) -> Result<(), String> {
 
 /// Salva o vídeo da retrospectiva em Vídeos\Harle Player e mostra no Explorer.
 #[tauri::command]
-fn save_video(name: String, data_base64: String) -> Result<String, String> {
+async fn save_video(name: String, data_base64: String) -> Result<String, String> {
     use base64::Engine;
     let b64 = data_base64.split_once("base64,").map(|x| x.1).unwrap_or(&data_base64);
     let bytes = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| e.to_string())?;
