@@ -1,6 +1,6 @@
 [package]
 name = "harle-player"
-version = "0.10.1"
+version = "0.11.0"
 description = "Player de música estético pro desktop — funciona com Spotify, YouTube Music, SoundCloud e Apple Music"
 authors = ["Harle"]
 license-file = "../LICENSE"
@@ -37,6 +37,7 @@ windows-sys = { version = "0.59", features = [
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_Graphics_Gdi",
   "Win32_UI_WindowsAndMessaging",
+  "Win32_Security_Cryptography",
 ] }
 
 [profile.release]

@@ -33,7 +33,7 @@ pub struct Track {
     pub duration_ms: Option<i64>,
     /// ordem: 0 = melhor resultado, 1 = música, 2 = vídeo
     #[serde(skip)]
-    rank: u8,
+    pub(crate) rank: u8,
 }
 
 #[derive(Serialize)]

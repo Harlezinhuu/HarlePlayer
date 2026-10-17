@@ -18,6 +18,7 @@ mod visualizer;
 mod volume;
 mod wallpaper;
 mod ytdlp;
+mod ytauth;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -92,9 +93,41 @@ async fn soundcloud_profile(profile: String) -> Result<search::Profile, String> 
         .map_err(|e| e.to_string())?
 }
 
+/// Login do YouTube pelo código de TV: devolve o código pra pessoa digitar no Google.
+#[tauri::command]
+async fn yt_login_start() -> Result<ytauth::LoginCode, String> {
+    tauri::async_runtime::spawn_blocking(ytauth::login_start).await.map_err(|e| e.to_string())?
+}
+
+/// "pending" enquanto a pessoa não autoriza; "ok" quando entrou.
+#[tauri::command]
+async fn yt_login_poll() -> Result<&'static str, String> {
+    tauri::async_runtime::spawn_blocking(ytauth::login_poll).await.map_err(|e| e.to_string())?
+}
+
+/// { available, loggedIn }: se esta versão tem o login e se já entrou.
+#[tauri::command]
+fn yt_status() -> serde_json::Value {
+    serde_json::json!({ "available": ytauth::available(), "loggedIn": ytauth::logged_in() })
+}
+
+#[tauri::command]
+async fn yt_account() -> Result<ytauth::YtAccount, String> {
+    tauri::async_runtime::spawn_blocking(ytauth::account).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn yt_logout() {
+    let _ = tauri::async_runtime::spawn_blocking(ytauth::logout).await;
+}
+
 /// Importa uma playlist pelo link (Spotify, SoundCloud, YouTube).
 #[tauri::command]
 async fn import_playlist(url: String) -> Result<search::ImportedPlaylist, String> {
+    if url.starts_with("ytauth:") {
+        // curtidas/playlists da conta do YouTube (com login)
+        return tauri::async_runtime::spawn_blocking(move || ytauth::import(&url)).await.map_err(|e| e.to_string())?;
+    }
     tauri::async_runtime::spawn_blocking(move || search::import_playlist(&url))
         .await
         .map_err(|e| e.to_string())?
@@ -515,6 +548,11 @@ fn main() {
             search_page,
             import_playlist,
             soundcloud_profile,
+            yt_login_start,
+            yt_login_poll,
+            yt_status,
+            yt_account,
+            yt_logout,
             soundcloud_audio,
             youtube_audio,
             check_update,

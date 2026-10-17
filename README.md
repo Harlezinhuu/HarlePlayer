@@ -27,7 +27,9 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Toca SoundCloud e YouTube Music dentro do app**, sem abrir navegador. O áudio do SoundCloud é baixado e tocado aqui. O YouTube toca pelo player oficial, escondido, e se o vídeo bloquear, o áudio vem pelo [yt-dlp](https://github.com/yt-dlp/yt-dlp), baixado e atualizado sozinho.
 - **Fila no estilo Spotify**: *Tocar a seguir* e *Adicionar à fila* pelo menu **⋯** ou pelo clique direito, arrastar pra reordenar, embaralhar, repetir (a fila ou uma música) e limpar.
 - **Playlists**: crie, renomeie, reordene e toque em ordem ou embaralhado, com músicas do SoundCloud e do YouTube Music.
-- **Suas curtidas e playlists do SoundCloud**: cole o link do seu perfil uma vez (no ícone de pessoa, na aba Playlists) e as músicas que você curtiu e as suas playlists aparecem no app, se atualizando sozinhas. Sem senha: no SoundCloud isso é público.
+- **Suas curtidas e playlists do SoundCloud e do YouTube** (ícone de pessoa, na aba Playlists), sempre atualizadas:
+  - **SoundCloud**: é só colar o link do seu perfil. Sem senha, porque lá isso é público.
+  - **YouTube / YouTube Music**: login pelo código, igual Smart TV (você autoriza em google.com/device, no seu navegador). O app nunca vê sua senha, só ganha permissão de **leitura**, e a chave fica criptografada pelo Windows no seu PC. Dá pra sair quando quiser, e o app avisa o Google.
 - **Importar playlist pelo link** (ou colando o link na busca): **Spotify**, **SoundCloud** e **YouTube / YouTube Music**, sem login. As do Spotify abrem no app do Spotify com um clique, então **contam pro Wrapped**. As do SoundCloud e do YouTube tocam aqui dentro.
 - **Equalizador de 10 faixas** no player interno, com presets (Grave+, Vocal, Rock, Eletrônica…) ou do seu jeito.
 - **Volume**: do player interno, ou só do app que está tocando (o Spotify, por exemplo), pelo mixer do Windows, sem mexer no volume do PC inteiro.
@@ -137,6 +139,10 @@ npm run build    # gera o instalador em src-tauri/target/release/bundle/nsis
 
 Pra mexer só no visual, sem compilar nada, use `npm run demo`.
 
+### Login do YouTube (pra quem compila)
+
+O login usa um app do Google Cloud. O ID e o segredo dele **não ficam no código**: entram só na hora do build, pelos segredos `HP_GOOGLE_CLIENT_ID` e `HP_GOOGLE_CLIENT_SECRET` do GitHub Actions (ou variáveis de ambiente com esses nomes no `npm run build`). Sem eles, o app funciona normal e a opção de login só não aparece.
+
 ### Testes
 
 ```bash
@@ -158,7 +164,7 @@ O `npm run demo` abre o front no navegador com músicas, letra e busca de exempl
 │ features/  uma parte por recurso:    │◀──IPC─▶│ search.rs    SoundCloud · YouTube Music · clipes      │
 │   library.js  fila e playlists       │        │ net.rs       LRCLIB (letras) e Deezer                 │
 │   search.js   busca completa         │        │ party.rs     salas de ouvir junto (ntfy.sh)           │
-│   settings.js configurações          │        │ ytdlp.rs     reserva do YouTube                       │
+│   settings.js configurações          │        │ ytdlp.rs · ytauth.rs  YouTube: reserva e login        │
 │   wrapped.js  retrospectiva          │        │ volume.rs    volume por app (WASAPI)                  │
 │   karaoke · freestyle · party.js     │        │ visualizer.rs graves do som do PC (WASAPI)            │
 │   remote.js   controle pelo celular  │        │ ducking.rs   voz no Discord → abaixar a música        │

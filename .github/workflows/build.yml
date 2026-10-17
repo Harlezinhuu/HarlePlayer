@@ -68,6 +68,9 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # login do YouTube (Google Cloud): entram só no build, nunca no código
+          HP_GOOGLE_CLIENT_ID: ${{ secrets.HP_GOOGLE_CLIENT_ID }}
+          HP_GOOGLE_CLIENT_SECRET: ${{ secrets.HP_GOOGLE_CLIENT_SECRET }}
         with:
           tagName: ${{ inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '' }}
           releaseName: "Harle Player ${{ inputs.tag || github.ref_name }}"

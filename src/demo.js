@@ -80,6 +80,7 @@ async function beatWav(bpm, seconds = 30) {
   return buf;
 }
 
+const demoYt = { logged: false, polls: 0 };
 const DEMO_SC_PLAYLISTS = [
   { name: "treino pesado", url: "https://soundcloud.com/harle/sets/treino", cover: null, count: 6, liked: false },
   { name: "madrugada", url: "https://soundcloud.com/harle/sets/madrugada", cover: null, count: 6, liked: false },
@@ -175,10 +176,28 @@ export function createDemoApi() {
           const name = args.profile.replace(/^.*soundcloud\.com\//, "").split(/[/?#]/)[0] || "harle";
           return { name, avatar: TRACKS[2].thumb, url: `https://soundcloud.com/${name}`, likesUrl: `https://soundcloud.com/${name}/likes`, likesCount: 6, playlists: DEMO_SC_PLAYLISTS };
         }
+        case "yt_status": return { available: true, loggedIn: demoYt.logged };
+        case "yt_login_start":
+          demoYt.polls = 0;
+          return { userCode: "HJKW-PQRT", verificationUrl: "https://www.google.com/device", expiresIn: 1800, interval: 5 };
+        case "yt_login_poll":
+          if (++demoYt.polls < 3) return "pending";
+          demoYt.logged = true;
+          return "ok";
+        case "yt_account":
+          return { name: "Harle", avatar: TRACKS[4].thumb, likesUrl: "ytauth:likes", playlists: [
+            { name: "academia 💪", url: "ytauth:playlist:PLdemo1", cover: TRACKS[1].thumb, count: 32 },
+            { name: "trap br", url: "ytauth:playlist:PLdemo2", cover: TRACKS[3].thumb, count: 58 },
+          ] };
+        case "yt_logout": demoYt.logged = false; return;
         case "import_playlist": {
           await new Promise((r) => setTimeout(r, 900));
           const sp = args.url.includes("spotify");
           const likes = /\/likes$/.test(args.url);
+          if (args.url.startsWith("ytauth:")) {
+            return { source: "youtube", name: args.url === "ytauth:likes" ? "Curtidas no YouTube" : args.url.endsWith("1") ? "academia 💪" : "trap br", cover: TRACKS[4].thumb, openUrl: `https://music.youtube.com/playlist?list=${args.url === "ytauth:likes" ? "LM" : args.url.split(":").pop()}`,
+              tracks: TRACKS.map((t, i) => ({ title: t.title, artist: t.artist, cover: t.thumb, url: `https://music.youtube.com/watch?v=demo${i}`, durationMs: t.durationMs })) };
+          }
           const scPl = DEMO_SC_PLAYLISTS.find((x) => x.url === args.url);
           return {
             source: sp ? "spotify" : args.url.includes("soundcloud") ? "soundcloud" : "youtube",

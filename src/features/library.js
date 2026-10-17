@@ -21,6 +21,17 @@ export function initLibrary(app) {
   const ACC = "__accounts"; // "playlist" especial = tela das contas
   let scProfile = store.get("hp.scProfile", null); // { name, avatar, url, likesUrl, likesCount, playlists }
   let scBusy = false;
+  // YouTube: login pelo código de TV (google.com/device), só leitura
+  let yt = { available: false, loggedIn: false };
+  let ytAccount = store.get("hp.ytAccount", null); // { name, avatar, likesUrl, playlists }
+  let ytLogin = null; // { userCode, verificationUrl, until } enquanto espera autorizar
+  let ytBusy = false;
+  let ytPollTimer = 0;
+  api.invoke("yt_status").then((st) => {
+    yt = st || yt;
+    if (!yt.loggedIn && ytAccount) { ytAccount = null; store.set("hp.ytAccount", null); }
+    if (openPlaylistId === ACC) renderQueue(true);
+  }).catch(() => {});
   let queueSig = "";
   let dragging = false;
 
@@ -136,7 +147,7 @@ export function initLibrary(app) {
       tools.innerHTML = `
         <button class="q-tool" data-act="back" title="Voltar">${ICON.back}</button>
         <span class="pl-name static">Suas contas</span>
-        ${scProfile ? `<button class="q-tool" data-act="scsync" title="Atualizar agora">${ICON.refresh}</button>` : ""}`;
+        ${scProfile || ytAccount ? `<button class="q-tool" data-act="scsync" title="Atualizar agora">${ICON.refresh}</button>` : ""}`;
       html = renderAccounts();
       list.dataset.kind = "accounts";
     } else if (pl && isSpotifyPl(pl)) {
@@ -251,7 +262,7 @@ export function initLibrary(app) {
         break;
       case "new": creatingPlaylist = true; break;
       case "accounts": openPlaylistId = ACC; break;
-      case "scsync": syncSoundcloud(true); return;
+      case "scsync": syncAccounts(true); return;
       case "import": importingPlaylist = true; break;
       case "doimport": {
         const url = $("#importUrl")?.value.trim();
@@ -391,7 +402,45 @@ export function initLibrary(app) {
   }
   // ---------- tela "Suas contas" ----------
   const inLibrary = (url) => playlists.find((p) => p.sourceUrl === url);
+  const accRow = (url, title, sub, art) => {
+    const have = inLibrary(url);
+    return `<li data-acc-url="${esc(url)}" title="${have ? "Abrir" : "Adicionar às suas playlists"}">${art}<div class="q-text"><div class="q-title">${esc(title)}</div><div class="q-artist">${sub}</div></div><span class="acc-tag ${have ? "on" : ""}">${have ? "na biblioteca" : "+ adicionar"}</span></li>`;
+  };
+  const accArt = (x) => (x.cover ? `<img class="q-cover" src="${esc(x.cover)}" alt="" draggable="false">` : `<div class="q-cover pl-blank">${ICON.play}</div>`);
   function renderAccounts() {
+    return renderSoundcloud() + renderYoutube();
+  }
+  function renderYoutube() {
+    const c = SRC.youtube;
+    let h = `<li class="q-label"><span class="src-dot" style="background:${c.color}"></span> YouTube</li>`;
+    if (!yt.available) {
+      return h + `<li class="acc-form"><p>O login do YouTube ainda não foi ativado nesta versão. Enquanto isso, playlists públicas ou não listadas entram pelo <b>Importar</b>, com o link.</p></li>`;
+    }
+    if (ytLogin) {
+      const mins = Math.max(0, Math.ceil((ytLogin.until - Date.now()) / 60000));
+      return h + `<li class="acc-form yt-code">
+          <p>1. Abra <b>${esc(ytLogin.verificationUrl.replace(/^https?:\/\//, ""))}</b> (no PC ou no celular)<br>2. Digite o código:</p>
+          <div class="yt-user-code" data-acc="ytcopy" title="Copiar">${esc(ytLogin.userCode)}</div>
+          <div class="acc-row"><button class="q-tool txt play" data-acc="ytopen">Abrir</button><button class="q-tool txt" data-acc="ytcopy">Copiar</button><button class="q-tool txt" data-acc="ytcancel">Cancelar</button></div>
+          <small>Esperando você autorizar… (o código vale ${mins} min). O app só ganha permissão de <b>ler</b> suas curtidas e playlists.</small>
+        </li>`;
+    }
+    if (!ytAccount) {
+      return h + `<li class="acc-form">
+          <p>Entre pra ver suas <b>músicas curtidas</b> e <b>playlists</b> do YouTube e do YouTube Music, sempre atualizadas.</p>
+          <button class="q-tool txt play wide-btn" data-acc="ytlogin" ${ytBusy ? "disabled" : ""}>${ytBusy ? "…" : "Entrar com o Google"}</button>
+          <small>Você autoriza no site do próprio Google (o app nunca vê sua senha). Permissão só de leitura, e dá pra cancelar quando quiser.</small>
+        </li>`;
+    }
+    const a = ytAccount;
+    h += `<li class="acc-head">${a.avatar ? `<img class="q-cover round" src="${esc(a.avatar)}" alt="">` : `<div class="q-cover round"></div>`}<div class="q-text"><div class="q-title">${esc(a.name)}</div><div class="q-artist">${ytBusy ? "atualizando…" : "conectado"}</div></div><button class="q-tool" data-acc="ytlogout" title="Sair da conta">${ICON.x}</button></li>`;
+    h += accRow(a.likesUrl, "Curtidas", "músicas e vídeos que você curtiu", `<div class="q-cover acc-heart yt">${ICON.heart}</div>`);
+    h += a.playlists.length
+      ? `<li class="q-label">Suas playlists</li>` + a.playlists.map((x) => accRow(x.url, x.name, `${x.count} ${x.count === 1 ? "item" : "itens"}`, accArt(x))).join("")
+      : `<li class="q-empty">Nenhuma playlist nessa conta.</li>`;
+    return h;
+  }
+  function renderSoundcloud() {
     const sc = SRC.soundcloud;
     let h = `<li class="q-label"><span class="src-dot" style="background:${sc.color}"></span> SoundCloud</li>`;
     if (!scProfile) {
@@ -404,13 +453,10 @@ export function initLibrary(app) {
     }
     const p = scProfile;
     h += `<li class="acc-head">${p.avatar ? `<img class="q-cover round" src="${esc(p.avatar)}" alt="">` : `<div class="q-cover round"></div>`}<div class="q-text"><div class="q-title">${esc(p.name)}</div><div class="q-artist">${scBusy ? "atualizando…" : "conectado"}</div></div><button class="q-tool" data-acc="disconnect" title="Desconectar">${ICON.x}</button></li>`;
-    const row = (url, title, sub, art, extra = "") => {
-      const have = inLibrary(url);
-      return `<li data-acc-url="${esc(url)}" title="${have ? "Abrir" : "Adicionar às suas playlists"}">${art}<div class="q-text"><div class="q-title">${esc(title)}</div><div class="q-artist">${sub}</div></div><span class="acc-tag ${have ? "on" : ""}">${have ? "na biblioteca" : "+ adicionar"}</span>${extra}</li>`;
-    };
+    const row = accRow;
     h += row(p.likesUrl, "Curtidas", `${p.likesCount} ${p.likesCount === 1 ? "música" : "músicas"}`, `<div class="q-cover acc-heart">${ICON.heart}</div>`);
     const own = p.playlists.filter((x) => !x.liked), liked = p.playlists.filter((x) => x.liked);
-    const art = (x) => (x.cover ? `<img class="q-cover" src="${esc(x.cover)}" alt="" draggable="false">` : `<div class="q-cover pl-blank">${ICON.play}</div>`);
+    const art = accArt;
     if (own.length) h += `<li class="q-label">Suas playlists</li>` + own.map((x) => row(x.url, x.name, `${x.count} músicas`, art(x))).join("");
     if (liked.length) h += `<li class="q-label">Playlists que você curtiu</li>` + liked.map((x) => row(x.url, x.name, `${x.count} músicas`, art(x))).join("");
     if (!own.length && !liked.length) h += `<li class="q-empty">Nenhuma playlist pública nesse perfil.</li>`;
@@ -436,20 +482,33 @@ export function initLibrary(app) {
       renderQueue(true);
     }
   }
-  /** Atualiza o perfil e todas as playlists marcadas como sincronizadas. */
-  async function syncSoundcloud(manual = false) {
-    if (!scProfile || scBusy) return;
-    scBusy = true;
-    if (manual) { toast("Atualizando do SoundCloud…", 2000); renderQueue(true); }
-    try {
-      scProfile = await api.invoke("soundcloud_profile", { profile: scProfile.url });
-      store.set("hp.scProfile", scProfile);
-    } catch (e) {
-      if (manual) toast(`SoundCloud: ${e?.message || e}`, 4000);
+  /** Atualiza as contas (SoundCloud e YouTube) e todas as playlists sincronizadas. */
+  async function syncAccounts(manual = false) {
+    if ((!scProfile && !ytAccount) || scBusy || ytBusy) return;
+    if (manual) { toast("Atualizando suas contas…", 2000); renderQueue(true); }
+    if (scProfile) {
+      scBusy = true;
+      try {
+        scProfile = await api.invoke("soundcloud_profile", { profile: scProfile.url });
+        store.set("hp.scProfile", scProfile);
+      } catch (e) {
+        if (manual) toast(`SoundCloud: ${e?.message || e}`, 4000);
+      }
+      scBusy = false;
     }
-    scBusy = false;
+    if (ytAccount) {
+      ytBusy = true;
+      try {
+        ytAccount = await api.invoke("yt_account");
+        store.set("hp.ytAccount", ytAccount);
+      } catch (e) {
+        if (/de novo|cancelado/i.test(String(e))) { ytAccount = null; store.set("hp.ytAccount", null); yt.loggedIn = false; }
+        if (manual) toast(`YouTube: ${e?.message || e}`, 4000);
+      }
+      ytBusy = false;
+    }
     let n = 0;
-    for (const p of playlists.filter((x) => x.synced && x.source === "soundcloud")) {
+    for (const p of playlists.filter((x) => x.synced && (x.source === "soundcloud" || (x.source === "youtube" && ytAccount && x.sourceUrl?.startsWith("ytauth:"))))) {
       if (await importPlaylistUrl(p.sourceUrl, { silent: true, synced: true })) n++;
     }
     settings.scSyncAt = Date.now();
@@ -457,8 +516,91 @@ export function initLibrary(app) {
     if (manual) toast(`Tudo atualizado (${n} ${n === 1 ? "playlist" : "playlists"})`);
     renderQueue(true);
   }
+  // ---------- YouTube: login pelo código ----------
+  async function ytStartLogin() {
+    if (ytBusy) return;
+    ytBusy = true;
+    renderQueue(true);
+    try {
+      const c = await api.invoke("yt_login_start");
+      ytLogin = { userCode: c.userCode, verificationUrl: c.verificationUrl, until: Date.now() + c.expiresIn * 1000 };
+      api.invoke("open_url", { url: c.verificationUrl }).catch(() => {});
+      clearInterval(ytPollTimer);
+      ytPollTimer = setInterval(ytPoll, 2000);
+    } catch (e) {
+      toast(String(e?.message || e), 5000);
+    } finally {
+      ytBusy = false;
+      renderQueue(true);
+    }
+  }
+  let ytPolling = false;
+  async function ytPoll() {
+    if (!ytLogin || ytPolling) return;
+    ytPolling = true;
+    try {
+      const r = await api.invoke("yt_login_poll");
+      if (r === "ok") {
+        clearInterval(ytPollTimer);
+        ytLogin = null;
+        yt.loggedIn = true;
+        ytBusy = true;
+        renderQueue(true);
+        ytAccount = await api.invoke("yt_account");
+        store.set("hp.ytAccount", ytAccount);
+        ytBusy = false;
+        toast(`Conectado como ${ytAccount.name}. Puxando suas curtidas…`, 3000);
+        renderQueue(true);
+        const likes = await importPlaylistUrl(ytAccount.likesUrl, { silent: true, synced: true });
+        toast(likes ? `Suas curtidas do YouTube: ${likes.tracks.length} ❤` : "Conta conectada", 3500);
+        settings.scSyncAt = settings.scSyncAt || Date.now();
+        saveSettings();
+      } else if (openPlaylistId === ACC) {
+        renderQueue(true); // atualiza os minutos que faltam
+      }
+    } catch (e) {
+      clearInterval(ytPollTimer);
+      ytLogin = null;
+      ytBusy = false;
+      toast(String(e?.message || e), 5000);
+    } finally {
+      ytPolling = false;
+      renderQueue(true);
+    }
+  }
+  async function ytAction(act, btn) {
+    if (act === "ytlogin") return ytStartLogin();
+    if (act === "ytopen") return api.invoke("open_url", { url: ytLogin?.verificationUrl || "https://www.google.com/device" }).catch(() => {});
+    if (act === "ytcopy") {
+      try { await navigator.clipboard.writeText(ytLogin?.userCode || ""); toast("Código copiado"); } catch { toast(ytLogin?.userCode || ""); }
+      return;
+    }
+    if (act === "ytcancel") {
+      clearInterval(ytPollTimer);
+      ytLogin = null;
+      return renderQueue(true);
+    }
+    if (act === "ytlogout") {
+      if (btn.dataset.confirm !== "1") {
+        btn.dataset.confirm = "1";
+        btn.classList.add("danger");
+        return toast("Clique de novo pra sair (o app apaga a chave e avisa o Google)");
+      }
+      await api.invoke("yt_logout").catch(() => {});
+      ytAccount = null;
+      yt.loggedIn = false;
+      store.set("hp.ytAccount", null);
+      playlists.forEach((p) => p.sourceUrl?.startsWith("ytauth:") && delete p.synced);
+      savePlaylists();
+      toast("Saiu da conta do YouTube");
+      return renderQueue(true);
+    }
+  }
+
   async function onAccountsClick(e) {
-    const act = e.target.closest("[data-acc]")?.dataset.acc;
+    const accBtn = e.target.closest("[data-acc]");
+    const act = accBtn?.dataset.acc;
+    if (act?.startsWith("yt")) return ytAction(act, accBtn);
     if (act === "connect") return connectSoundcloud($("#scProfileInput")?.value.trim());
     if (act === "disconnect") {
       const b = e.target.closest("[data-acc]");
@@ -493,9 +635,9 @@ export function initLibrary(app) {
   });
   // sincroniza sozinho: ao abrir o app (se faz mais de 3 h) e a cada 3 h
   if (!IS_WALLPAPER) {
-    const due = () => scProfile && Date.now() - (settings.scSyncAt || 0) > 3 * 3600e3;
-    setTimeout(() => due() && syncSoundcloud(), 8000);
-    setInterval(() => due() && syncSoundcloud(), 15 * 60e3);
+    const due = () => (scProfile || ytAccount) && Date.now() - (settings.scSyncAt || 0) > 3 * 3600e3;
+    setTimeout(() => due() && syncAccounts(), 8000);
+    setInterval(() => due() && syncAccounts(), 15 * 60e3);
   }
 
   $("#nowItem").addEventListener("click", () => control("toggle"));

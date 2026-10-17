@@ -29,7 +29,9 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
 - **Plays SoundCloud and YouTube Music inside the app**, no browser needed. SoundCloud audio is downloaded and played here. YouTube plays through the official player, hidden, and when a video is blocked the audio comes through [yt-dlp](https://github.com/yt-dlp/yt-dlp), downloaded and kept up to date automatically.
 - **Spotify-style queue**: *Play next* and *Add to queue* from the **⋯** menu or right-click, drag to reorder, shuffle, repeat (queue or one song) and clear.
 - **Playlists**: create, rename, reorder and play in order or shuffled, with songs from SoundCloud and YouTube Music.
-- **Your SoundCloud likes and playlists**: paste your profile link once (the person icon in the Playlists tab) and the songs you liked and your playlists show up in the app, updating by themselves. No password: on SoundCloud that's public.
+- **Your SoundCloud and YouTube likes and playlists** (the person icon in the Playlists tab), always up to date:
+  - **SoundCloud**: just paste your profile link. No password, since that's public there.
+  - **YouTube / YouTube Music**: TV-style code login (you authorize at google.com/device, in your own browser). The app never sees your password, only gets **read-only** access, and the key is stored encrypted by Windows on your PC. You can sign out anytime, and the app tells Google.
 - **Import a playlist by link** (or by pasting the link into search): **Spotify**, **SoundCloud** and **YouTube / YouTube Music**, no login. Spotify playlists open in the Spotify app with one click, so they **count toward Wrapped**. SoundCloud and YouTube ones play right here.
 - **10-band equalizer** on the built-in player, with presets (Bass+, Vocal, Rock, Electronic…) or your own.
 - **Volume**: of the built-in player, or only of the app that's playing (Spotify, for example) through the Windows mixer, without touching the whole PC's volume.
@@ -139,6 +141,10 @@ npm run build    # builds the installer in src-tauri/target/release/bundle/nsis
 
 To work only on the UI, without compiling anything, use `npm run demo`.
 
+### YouTube login (for builders)
+
+The login uses a Google Cloud app. Its ID and secret **are not in the code**: they're injected at build time through the `HP_GOOGLE_CLIENT_ID` and `HP_GOOGLE_CLIENT_SECRET` GitHub Actions secrets (or environment variables with those names for `npm run build`). Without them, the app works normally and the login option just doesn't show up.
+
 ### Tests
 
 ```bash
@@ -160,7 +166,7 @@ GitHub Actions runs everything on every push and builds the installer. The live 
 │ features/  one file per feature:     │◀──IPC─▶│ search.rs    SoundCloud · YouTube Music · videos      │
 │   library.js  queue and playlists    │        │ net.rs       LRCLIB (lyrics) and Deezer               │
 │   search.js   full search            │        │ party.rs     listen-together rooms (ntfy.sh)          │
-│   settings.js settings panel         │        │ ytdlp.rs     YouTube fallback                         │
+│   settings.js settings panel         │        │ ytdlp.rs · ytauth.rs  YouTube: fallback and login     │
 │   wrapped.js  listening recap        │        │ volume.rs    per-app volume (WASAPI)                  │
 │   karaoke · freestyle · party.js     │        │ visualizer.rs PC audio bass level (WASAPI)            │
 │   remote.js   phone remote           │        │ ducking.rs   Discord voice → lower the music          │
