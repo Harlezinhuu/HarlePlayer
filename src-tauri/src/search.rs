@@ -1376,7 +1376,7 @@ mod tests {
     fn ao_vivo_soundcloud_perfil() {
         // acha um perfil com curtidas públicas pela busca de usuários
         let id = soundcloud::client_id_for_test().expect("sem client_id");
-        let t = http_get(&format!("https://api-v2.soundcloud.com/search/users?q=dj&limit=30&client_id={id}")).expect("busca de perfis");
+        let t = http_get(&format!("https://api-v2.soundcloud.com/search/users?q=dj&limit=30&client_id={id}")).ok().expect("busca de perfis");
         let v: Value = serde_json::from_str(&t).unwrap();
         let link = v["collection"].as_array().unwrap().iter()
             .find(|u| u["likes_count"].as_i64().unwrap_or(0) > 30 && u["playlist_count"].as_i64().unwrap_or(0) > 0)
