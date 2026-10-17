@@ -43,6 +43,8 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Beat do app** (boom bap, trap ou lo-fi, no BPM que quiser, sintetizado na hora) ou **o instrumental de qualquer música**: o app procura no YouTube Music e no SoundCloud, descobre o BPM e onde cai o "1" do compasso ouvindo o áudio. Se não achar instrumental, tira a voz.
 - Microfone nos fones e **gravação** do freestyle, igual ao karaokê.
 
+<img src="docs/freestyle.jpg" alt="Freestyle: palavra pra rimar no centro, dicas embaixo e as batidas do compasso" />
+
 ### 🔎 Buscar
 - **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…).
 - **Abas Tudo · Músicas · Artistas**: os principais resultados e a lista completa, que carrega mais conforme você rola. Clicou numa música, ela toca e o resto da lista vira a fila.
