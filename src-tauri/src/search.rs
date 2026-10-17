@@ -112,6 +112,33 @@ pub fn classify_link(url: &str) -> Option<(&'static str, String, String)> {
     None
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfilePlaylist {
+    pub name: String,
+    pub url: String,
+    pub cover: Option<String>,
+    pub count: i64,
+    /// playlist de outra pessoa que você curtiu
+    pub liked: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Profile {
+    pub name: String,
+    pub avatar: Option<String>,
+    pub url: String,
+    pub likes_url: String,
+    pub likes_count: i64,
+    pub playlists: Vec<ProfilePlaylist>,
+}
+
+/// Perfil público do SoundCloud: curtidas e playlists, sem login.
+pub fn soundcloud_profile(profile: &str) -> Result<Profile, String> {
+    soundcloud::profile(profile)
+}
+
 pub fn import_playlist(url: &str) -> Result<ImportedPlaylist, String> {
     let (svc, kind, id) = classify_link(url)
         .ok_or("Esse link não parece de playlist do Spotify, SoundCloud ou YouTube")?;
@@ -447,7 +474,15 @@ mod soundcloud {
 
     /// Playlist/álbum do SoundCloud pelo link (até 500 faixas).
     pub fn import(url: &str) -> Result<ImportedPlaylist, String> {
+        // soundcloud.com/fulano/likes → curtidas do fulano
+        let clean = url.trim().trim_end_matches('/');
+        if let Some(profile) = clean.strip_suffix("/likes") {
+            return likes(profile);
+        }
         let v = api_get(&format!("https://api-v2.soundcloud.com/resolve?url={}", enc(url)))?;
+        if v["kind"].as_str() == Some("user") {
+            return likes(clean);
+        }
         if v["kind"].as_str() != Some("playlist") {
             return Err("Esse link do SoundCloud não é de uma playlist ou álbum".into());
         }
@@ -489,6 +524,104 @@ mod soundcloud {
             cover: big(v["artwork_url"].as_str()).or_else(|| tracks[0].cover.clone()),
             open_url: v["permalink_url"].as_str().unwrap_or(url).to_string(),
             tracks,
+        })
+    }
+
+    /// Perfil pelo link (ou só o nome: "fulano" → soundcloud.com/fulano).
+    fn resolve_user(profile: &str) -> Result<Value, String> {
+        let p = profile.trim().trim_end_matches('/');
+        let url = if p.contains("soundcloud.com/") {
+            let after = p.split("soundcloud.com/").nth(1).unwrap_or("");
+            let name = after.split(['/', '?', '#']).next().unwrap_or("");
+            format!("https://soundcloud.com/{name}")
+        } else {
+            format!("https://soundcloud.com/{}", p.trim_start_matches('@'))
+        };
+        let v = api_get(&format!("https://api-v2.soundcloud.com/resolve?url={}", enc(&url)))
+            .map_err(|e| if e.contains("não achou") { "Não achei esse perfil no SoundCloud".to_string() } else { e })?;
+        if v["kind"].as_str() != Some("user") {
+            return Err("Esse link não é de um perfil do SoundCloud".into());
+        }
+        Ok(v)
+    }
+
+    /// Segue o "next_href" das listas paginadas da api-v2 até `max` itens.
+    fn paged(first: &str, max: usize) -> Result<Vec<Value>, String> {
+        let mut out = Vec::new();
+        let mut url = first.to_string();
+        for _ in 0..20 {
+            let v = api_get(&url)?;
+            if let Some(a) = v["collection"].as_array() {
+                out.extend(a.iter().cloned());
+            }
+            if out.len() >= max {
+                break;
+            }
+            match v["next_href"].as_str() {
+                // o next_href às vezes já vem com um client_id velho: tira pra pôr o atual
+                Some(n) if !n.is_empty() => {
+                    url = n
+                        .split('&')
+                        .filter(|kv| !kv.starts_with("client_id="))
+                        .collect::<Vec<_>>()
+                        .join("&");
+                }
+                _ => break,
+            }
+        }
+        out.truncate(max);
+        Ok(out)
+    }
+
+    /// Músicas curtidas de um perfil (são públicas no SoundCloud), até 1000.
+    pub fn likes(profile: &str) -> Result<ImportedPlaylist, String> {
+        let u = resolve_user(profile)?;
+        let id = u["id"].as_i64().ok_or("perfil sem id")?;
+        let items = paged(&format!("https://api-v2.soundcloud.com/users/{id}/track_likes?limit=200&linked_partitioning=1"), 1000)?;
+        let tracks: Vec<Track> = items.iter().filter_map(|it| track(&it["track"])).collect();
+        let name = u["username"].as_str().unwrap_or("você");
+        if tracks.is_empty() {
+            return Err(format!("{name} ainda não curtiu nenhuma música (ou as curtidas estão escondidas)"));
+        }
+        Ok(ImportedPlaylist {
+            source: "soundcloud".into(),
+            name: "Curtidas no SoundCloud".into(),
+            cover: big(u["avatar_url"].as_str()),
+            open_url: format!("{}/likes", u["permalink_url"].as_str().unwrap_or("https://soundcloud.com")),
+            tracks,
+        })
+    }
+
+    /// Perfil: nome, foto e as playlists (as suas e as que você curtiu).
+    pub fn profile(profile: &str) -> Result<Profile, String> {
+        let u = resolve_user(profile)?;
+        let id = u["id"].as_i64().ok_or("perfil sem id")?;
+        let link = u["permalink_url"].as_str().unwrap_or("").to_string();
+        let to_pl = |p: &Value, liked: bool| -> Option<ProfilePlaylist> {
+            Some(ProfilePlaylist {
+                name: p["title"].as_str()?.to_string(),
+                url: p["permalink_url"].as_str()?.to_string(),
+                cover: big(p["artwork_url"].as_str()),
+                count: p["track_count"].as_i64().unwrap_or(0),
+                liked,
+            })
+        };
+        let mut playlists: Vec<ProfilePlaylist> = paged(&format!("https://api-v2.soundcloud.com/users/{id}/playlists_without_albums?limit=50&linked_partitioning=1"), 100)
+            .or_else(|_| paged(&format!("https://api-v2.soundcloud.com/users/{id}/playlists?limit=50&linked_partitioning=1"), 100))
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|p| to_pl(p, false))
+            .collect();
+        if let Ok(liked) = paged(&format!("https://api-v2.soundcloud.com/users/{id}/playlist_likes?limit=50&linked_partitioning=1"), 100) {
+            playlists.extend(liked.iter().filter_map(|it| to_pl(&it["playlist"], true)));
+        }
+        Ok(Profile {
+            name: u["username"].as_str().unwrap_or("").to_string(),
+            avatar: big(u["avatar_url"].as_str()),
+            likes_url: format!("{link}/likes"),
+            likes_count: u["likes_count"].as_i64().unwrap_or(0),
+            url: link,
+            playlists,
         })
     }
 
@@ -1235,6 +1368,30 @@ mod tests {
         match import_playlist(&found) {
             Ok(p) => println!("Importar soundcloud: '{}' com {} faixas ({found})", p.name, p.tracks.len()),
             Err(e) => panic!("Importar soundcloud falhou: {e} ({found})"),
+        }
+    }
+
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_soundcloud_perfil() {
+        // acha um perfil com curtidas públicas pela busca de usuários
+        let id = soundcloud::client_id_for_test().expect("sem client_id");
+        let t = http_get(&format!("https://api-v2.soundcloud.com/search/users?q=dj&limit=30&client_id={id}")).expect("busca de perfis");
+        let v: Value = serde_json::from_str(&t).unwrap();
+        let link = v["collection"].as_array().unwrap().iter()
+            .find(|u| u["likes_count"].as_i64().unwrap_or(0) > 30 && u["playlist_count"].as_i64().unwrap_or(0) > 0)
+            .or_else(|| v["collection"].as_array().unwrap().iter().find(|u| u["likes_count"].as_i64().unwrap_or(0) > 30))
+            .and_then(|u| u["permalink_url"].as_str()).map(String::from)
+            .expect("nenhum perfil com curtidas na busca");
+        let p = soundcloud_profile(&link).unwrap_or_else(|e| panic!("perfil falhou: {e} ({link})"));
+        println!("Perfil SoundCloud: '{}' · {} curtidas · {} playlists ({link})", p.name, p.likes_count, p.playlists.len());
+        for pl in p.playlists.iter().take(3) { println!("  playlist: {} ({} faixas, curtida={})", pl.name, pl.count, pl.liked); }
+        // pelo link do perfil, pelo /likes e só pelo nome
+        let name = link.trim_end_matches('/').rsplit('/').next().unwrap().to_string();
+        for entrada in [link.clone(), format!("{link}/likes"), name] {
+            let l = import_playlist(&entrada).or_else(|_| soundcloud::likes(&entrada)).unwrap_or_else(|e| panic!("curtidas falharam: {e} ({entrada})"));
+            assert!(!l.tracks.is_empty());
+            println!("Curtidas via '{entrada}': {} faixas, 1ª: {} — {}", l.tracks.len(), l.tracks[0].title, l.tracks[0].artist);
         }
     }
 

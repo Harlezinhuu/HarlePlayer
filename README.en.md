@@ -29,6 +29,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
 - **Plays SoundCloud and YouTube Music inside the app**, no browser needed. SoundCloud audio is downloaded and played here. YouTube plays through the official player, hidden, and when a video is blocked the audio comes through [yt-dlp](https://github.com/yt-dlp/yt-dlp), downloaded and kept up to date automatically.
 - **Spotify-style queue**: *Play next* and *Add to queue* from the **⋯** menu or right-click, drag to reorder, shuffle, repeat (queue or one song) and clear.
 - **Playlists**: create, rename, reorder and play in order or shuffled, with songs from SoundCloud and YouTube Music.
+- **Your SoundCloud likes and playlists**: paste your profile link once (the person icon in the Playlists tab) and the songs you liked and your playlists show up in the app, updating by themselves. No password: on SoundCloud that's public.
 - **Import a playlist by link** (or by pasting the link into search): **Spotify**, **SoundCloud** and **YouTube / YouTube Music**, no login. Spotify playlists open in the Spotify app with one click, so they **count toward Wrapped**. SoundCloud and YouTube ones play right here.
 - **10-band equalizer** on the built-in player, with presets (Bass+, Vocal, Rock, Electronic…) or your own.
 - **Volume**: of the built-in player, or only of the app that's playing (Spotify, for example) through the Windows mixer, without touching the whole PC's volume.

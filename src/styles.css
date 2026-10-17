@@ -944,3 +944,22 @@ body.mode-wallpaper #partyPanel { display: none !important; }
 /* sub-opção (depende da chave de cima) */
 .toggle-row.sub { padding-left: 16px; border-left: 2px solid rgba(255,255,255,.08); margin-left: 4px; }
 .toggle-row.sub.off { opacity: .45; }
+
+/* ===== Suas contas (SoundCloud) ===== */
+.q-tool.acc { flex: 0 0 34px; }
+.pl-name.static { display: flex; align-items: center; cursor: default; }
+.pl-name.static:hover { background: transparent; }
+#historyList .q-label .src-dot { vertical-align: middle; }
+#historyList .acc-form { display: block; cursor: default; padding: 8px 6px 12px; }
+#historyList .acc-form:hover, #historyList .acc-head:hover { background: transparent; }
+.acc-form p { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.acc-form p b { color: var(--text); }
+.acc-form small { display: block; margin-top: 8px; font-size: 10.5px; color: var(--muted); line-height: 1.4; }
+.acc-row { display: flex; gap: 6px; }
+.acc-row .pl-name { background: rgba(255,255,255,.07); border: 1px solid var(--stroke); font-weight: 600; font-size: 12px; }
+#historyList .acc-head { cursor: default; }
+.q-cover.round { border-radius: 50%; }
+.q-cover.acc-heart { display: grid; place-items: center; background: linear-gradient(135deg, #ff7a1a, #ff3d6e); }
+.q-cover.acc-heart svg { width: 18px; height: 18px; fill: #fff; }
+.acc-tag { margin-left: auto; flex: none; font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 7px; background: rgba(255,255,255,.08); color: var(--muted); white-space: nowrap; }
+.acc-tag.on { background: rgba(var(--accent), .22); color: var(--text); }

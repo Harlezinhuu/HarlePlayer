@@ -1523,6 +1523,9 @@ $("#btnClose").addEventListener("click", () => {
 // ===================================================================
 document.addEventListener("keydown", (e) => {
   const typing = e.target === searchUi.input;
+  // digitando em outro campo (link, nome da playlist, código da sala…): atalhos ficam quietos
+  const inField = !typing && (e.target.isContentEditable || (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !/^(range|checkbox|radio|button)$/.test(e.target.type)));
+  if (inField) return;
   if ((e.key === "/" && !typing) || (e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey))) {
     e.preventDefault();
     searchUi.input.focus();

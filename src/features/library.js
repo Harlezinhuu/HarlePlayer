@@ -17,6 +17,10 @@ export function initLibrary(app) {
     youtube: { name: "YouTube", color: "#ff3b3b" },
   };
   const isSpotifyPl = (p) => p?.source === "spotify";
+  // ---------- contas: curtidas e playlists do seu perfil do SoundCloud ----------
+  const ACC = "__accounts"; // "playlist" especial = tela das contas
+  let scProfile = store.get("hp.scProfile", null); // { name, avatar, url, likesUrl, likesCount, playlists }
+  let scBusy = false;
   let queueSig = "";
   let dragging = false;
 
@@ -30,6 +34,8 @@ export function initLibrary(app) {
     x: `<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.5M4 4.5V8h3.5M4 13a8 8 0 0 0 14.6 4.5M20 19.5V16h-3.5"/></svg>`,
     link: `<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>`,
+    user: `<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.5 20c.9-3.9 3.8-5.8 7.5-5.8s6.6 1.9 7.5 5.8"/></svg>`,
+    heart: `<svg viewBox="0 0 24 24" class="fill"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg>`,
     more: `<svg viewBox="0 0 24 24" class="fill"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>`,
   };
   const rmBtn = (attr) => `<button class="q-rm" ${attr} title="Tirar">${ICON.x}</button>`;
@@ -126,6 +132,13 @@ export function initLibrary(app) {
       html = items.length
         ? items.map((h) => `<li data-hk="${esc(h.key)}" title="Tocar">${queueItemHtml(h, false)}</li>`).join("")
         : `<li class="q-empty">O que você ouvir aparece aqui.</li>`;
+    } else if (openPlaylistId === ACC) {
+      tools.innerHTML = `
+        <button class="q-tool" data-act="back" title="Voltar">${ICON.back}</button>
+        <span class="pl-name static">Suas contas</span>
+        ${scProfile ? `<button class="q-tool" data-act="scsync" title="Atualizar agora">${ICON.refresh}</button>` : ""}`;
+      html = renderAccounts();
+      list.dataset.kind = "accounts";
     } else if (pl && isSpotifyPl(pl)) {
       // Playlist do Spotify: toca no app do Spotify (conta pro Wrapped)
       tools.innerHTML = `
@@ -157,7 +170,8 @@ export function initLibrary(app) {
           ? `<input class="pl-name" id="importUrl" placeholder="Link do Spotify, SoundCloud ou YouTube" spellcheck="false" ${importBusy ? "disabled" : ""} />
              <button class="q-tool txt" data-act="doimport" ${importBusy ? "disabled" : ""}>${importBusy ? "…" : "Importar"}</button>`
           : `<button class="q-tool txt wide" data-act="new">${ICON.plus}Nova</button>
-             <button class="q-tool txt wide" data-act="import">${ICON.link}Importar</button>`;
+             <button class="q-tool txt wide" data-act="import">${ICON.link}Importar</button>
+             <button class="q-tool wide acc" data-act="accounts" title="Suas curtidas e playlists do SoundCloud">${ICON.user}</button>`;
       html = playlists.length
         ? playlists
             .map((p) => {
@@ -166,7 +180,7 @@ export function initLibrary(app) {
               const art = covers.length >= 4
                 ? `<div class="q-cover mosaic">${covers.map((c) => `<img src="${esc(c)}" alt="" draggable="false">`).join("")}</div>`
                 : covers.length ? `<img class="q-cover" src="${esc(covers[0])}" alt="" draggable="false">` : `<div class="q-cover pl-blank">${ICON.play}</div>`;
-              return `<li data-pl="${esc(p.id)}" title="Abrir">${art}<div class="q-text"><div class="q-title">${esc(p.name)}</div><div class="q-artist">${src ? `<span class="src-dot" style="background:${src.color}"></span>${src.name} · ` : ""}${p.tracks.length} ${p.tracks.length === 1 ? "música" : "músicas"}</div></div></li>`;
+              return `<li data-pl="${esc(p.id)}" title="Abrir">${art}<div class="q-text"><div class="q-title">${esc(p.name)}</div><div class="q-artist">${src ? `<span class="src-dot" style="background:${src.color}"></span>${src.name} · ` : ""}${p.synced ? "↻ " : ""}${p.tracks.length} ${p.tracks.length === 1 ? "música" : "músicas"}</div></div></li>`;
             })
             .join("")
         : creatingPlaylist ? "" : `<li class="q-empty">Nenhuma playlist ainda.</li>`;
@@ -236,6 +250,8 @@ export function initLibrary(app) {
         toast("Playlist apagada");
         break;
       case "new": creatingPlaylist = true; break;
+      case "accounts": openPlaylistId = ACC; break;
+      case "scsync": syncSoundcloud(true); return;
       case "import": importingPlaylist = true; break;
       case "doimport": {
         const url = $("#importUrl")?.value.trim();
@@ -254,6 +270,7 @@ export function initLibrary(app) {
     renderQueue(true);
   });
   $("#qTools").addEventListener("keydown", (e) => {
+    if (e.target.id === "scProfileInput") return;
     if (e.target.id === "importUrl") {
       if (e.key === "Enter") $("#qTools [data-act=doimport]")?.click();
       if (e.key === "Escape") { importingPlaylist = false; e.target.blur(); renderQueue(true); }
@@ -276,6 +293,7 @@ export function initLibrary(app) {
   });
 
   $("#historyList").addEventListener("click", (e) => {
+    if (openPlaylistId === ACC) return onAccountsClick(e);
     if (e.target.closest(".q-label, .q-empty")) return;
     const li = e.target.closest("li");
     if (!li || li.dataset.dragged) return;
@@ -323,13 +341,16 @@ export function initLibrary(app) {
   const PLAYLIST_LINK = /(open\.spotify\.com\/(intl-[a-z-]+\/)?(playlist|album)\/|^spotify:(playlist|album):|soundcloud\.com\/[^/\s]+\/sets\/|[?&]list=)/i;
   const isPlaylistLink = (s) => PLAYLIST_LINK.test(s.trim());
 
-  async function importPlaylistUrl(url) {
+  /** silent: atualização no fundo (sem trocar de aba nem avisar); synced: mantém atualizada sozinha */
+  async function importPlaylistUrl(url, { silent = false, synced = false, open = true } = {}) {
     if (importBusy) return;
     importBusy = true;
-    importingPlaylist = true;
-    if (settings.queueTab !== "playlists") { settings.queueTab = "playlists"; saveSettings(); openPlaylistId = null; }
-    renderQueue(true);
-    toast("Importando playlist…", 2500);
+    if (!silent) {
+      importingPlaylist = true;
+      if (settings.queueTab !== "playlists") { settings.queueTab = "playlists"; saveSettings(); openPlaylistId = null; }
+      renderQueue(true);
+      toast("Importando playlist…", 2500);
+    }
     try {
       const r = await api.invoke("import_playlist", { url });
       if (!r) throw new Error("sem resposta");
@@ -341,22 +362,135 @@ export function initLibrary(app) {
       let p = playlists.find((x) => x.sourceUrl === url || (x.openUrl && x.openUrl === r.openUrl));
       if (p) {
         Object.assign(p, { tracks, cover: r.cover || p.cover, source: r.source, openUrl: r.openUrl, sourceUrl: url });
-        toast(`"${p.name}" atualizada · ${tracks.length} músicas`);
+        if (synced) p.synced = true;
+        if (!silent) toast(`"${p.name}" atualizada · ${tracks.length} músicas`);
       } else {
-        p = { id: `pl${Date.now().toString(36)}`, name: r.name, cover: r.cover || null, source: r.source, openUrl: r.openUrl, sourceUrl: url, tracks };
+        p = { id: `pl${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, name: r.name, cover: r.cover || null, source: r.source, openUrl: r.openUrl, sourceUrl: url, tracks };
+        if (synced) p.synced = true;
         playlists.unshift(p);
-        toast(`"${p.name}" importada · ${tracks.length} músicas`);
+        if (!silent) toast(`"${p.name}" importada · ${tracks.length} músicas`);
       }
       savePlaylists();
-      openPlaylistId = p.id;
-      importingPlaylist = false;
+      if (!silent && open) openPlaylistId = p.id;
+      if (!silent) importingPlaylist = false;
+      return p;
     } catch (e) {
-      toast(`Não deu pra importar: ${e?.message || e}`, 5000);
+      if (!silent) toast(`Não deu pra importar: ${e?.message || e}`, 5000);
+      else console.warn("sincronizar", url, e);
     } finally {
       importBusy = false;
       renderQueue(true);
     }
   }
+  // ---------- tela "Suas contas" ----------
+  const inLibrary = (url) => playlists.find((p) => p.sourceUrl === url);
+  function renderAccounts() {
+    const sc = SRC.soundcloud;
+    let h = `<li class="q-label"><span class="src-dot" style="background:${sc.color}"></span> SoundCloud</li>`;
+    if (!scProfile) {
+      return h + `<li class="acc-form">
+          <p>Cole o link do seu perfil e suas <b>curtidas</b> e <b>playlists</b> aparecem aqui, sempre atualizadas.</p>
+          <div class="acc-row"><input id="scProfileInput" class="pl-name" placeholder="soundcloud.com/seu-nome" spellcheck="false" ${scBusy ? "disabled" : ""} />
+          <button class="q-tool txt play" data-acc="connect" ${scBusy ? "disabled" : ""}>${scBusy ? "…" : "Conectar"}</button></div>
+          <small>No SoundCloud as curtidas são públicas: não precisa de senha nem de login.</small>
+        </li>`;
+    }
+    const p = scProfile;
+    h += `<li class="acc-head">${p.avatar ? `<img class="q-cover round" src="${esc(p.avatar)}" alt="">` : `<div class="q-cover round"></div>`}<div class="q-text"><div class="q-title">${esc(p.name)}</div><div class="q-artist">${scBusy ? "atualizando…" : "conectado"}</div></div><button class="q-tool" data-acc="disconnect" title="Desconectar">${ICON.x}</button></li>`;
+    const row = (url, title, sub, art, extra = "") => {
+      const have = inLibrary(url);
+      return `<li data-acc-url="${esc(url)}" title="${have ? "Abrir" : "Adicionar às suas playlists"}">${art}<div class="q-text"><div class="q-title">${esc(title)}</div><div class="q-artist">${sub}</div></div><span class="acc-tag ${have ? "on" : ""}">${have ? "na biblioteca" : "+ adicionar"}</span>${extra}</li>`;
+    };
+    h += row(p.likesUrl, "Curtidas", `${p.likesCount} ${p.likesCount === 1 ? "música" : "músicas"}`, `<div class="q-cover acc-heart">${ICON.heart}</div>`);
+    const own = p.playlists.filter((x) => !x.liked), liked = p.playlists.filter((x) => x.liked);
+    const art = (x) => (x.cover ? `<img class="q-cover" src="${esc(x.cover)}" alt="" draggable="false">` : `<div class="q-cover pl-blank">${ICON.play}</div>`);
+    if (own.length) h += `<li class="q-label">Suas playlists</li>` + own.map((x) => row(x.url, x.name, `${x.count} músicas`, art(x))).join("");
+    if (liked.length) h += `<li class="q-label">Playlists que você curtiu</li>` + liked.map((x) => row(x.url, x.name, `${x.count} músicas`, art(x))).join("");
+    if (!own.length && !liked.length) h += `<li class="q-empty">Nenhuma playlist pública nesse perfil.</li>`;
+    return h;
+  }
+  async function connectSoundcloud(input) {
+    if (scBusy || !input) return;
+    scBusy = true;
+    renderQueue(true);
+    try {
+      scProfile = await api.invoke("soundcloud_profile", { profile: input });
+      store.set("hp.scProfile", scProfile);
+      settings.scSyncAt = Date.now();
+      saveSettings();
+      toast(`Conectado como ${scProfile.name}. Puxando suas curtidas…`, 3000);
+      scBusy = false;
+      const likes = await importPlaylistUrl(scProfile.likesUrl, { silent: true, synced: true });
+      toast(likes ? `Suas curtidas: ${likes.tracks.length} músicas ❤` : "Perfil conectado (sem curtidas públicas)", 3500);
+    } catch (e) {
+      toast(String(e?.message || e), 5000);
+    } finally {
+      scBusy = false;
+      renderQueue(true);
+    }
+  }
+  /** Atualiza o perfil e todas as playlists marcadas como sincronizadas. */
+  async function syncSoundcloud(manual = false) {
+    if (!scProfile || scBusy) return;
+    scBusy = true;
+    if (manual) { toast("Atualizando do SoundCloud…", 2000); renderQueue(true); }
+    try {
+      scProfile = await api.invoke("soundcloud_profile", { profile: scProfile.url });
+      store.set("hp.scProfile", scProfile);
+    } catch (e) {
+      if (manual) toast(`SoundCloud: ${e?.message || e}`, 4000);
+    }
+    scBusy = false;
+    let n = 0;
+    for (const p of playlists.filter((x) => x.synced && x.source === "soundcloud")) {
+      if (await importPlaylistUrl(p.sourceUrl, { silent: true, synced: true })) n++;
+    }
+    settings.scSyncAt = Date.now();
+    saveSettings();
+    if (manual) toast(`Tudo atualizado (${n} ${n === 1 ? "playlist" : "playlists"})`);
+    renderQueue(true);
+  }
+  async function onAccountsClick(e) {
+    const act = e.target.closest("[data-acc]")?.dataset.acc;
+    if (act === "connect") return connectSoundcloud($("#scProfileInput")?.value.trim());
+    if (act === "disconnect") {
+      const b = e.target.closest("[data-acc]");
+      if (b.dataset.confirm !== "1") {
+        b.dataset.confirm = "1";
+        b.classList.add("danger");
+        return toast("Clique de novo pra desconectar (as playlists continuam salvas)");
+      }
+      scProfile = null;
+      store.set("hp.scProfile", null);
+      playlists.forEach((p) => p.source === "soundcloud" && delete p.synced);
+      savePlaylists();
+      return renderQueue(true);
+    }
+    const li = e.target.closest("[data-acc-url]");
+    if (!li) return;
+    const url = li.dataset.accUrl;
+    const have = inLibrary(url);
+    if (have) {
+      openPlaylistId = have.id;
+      return renderQueue(true);
+    }
+    li.querySelector(".acc-tag").textContent = "importando…";
+    const p = await importPlaylistUrl(url, { silent: true, synced: true });
+    if (p) toast(`"${p.name}" adicionada · ${p.tracks.length} músicas (fica sempre atualizada)`, 3000);
+    else toast("Não deu pra importar essa playlist", 4000);
+    renderQueue(true);
+  }
+  // Enter no campo do perfil
+  $("#historyList").addEventListener("keydown", (e) => {
+    if (e.target.id === "scProfileInput" && e.key === "Enter") connectSoundcloud(e.target.value.trim());
+  });
+  // sincroniza sozinho: ao abrir o app (se faz mais de 3 h) e a cada 3 h
+  if (!IS_WALLPAPER) {
+    const due = () => scProfile && Date.now() - (settings.scSyncAt || 0) > 3 * 3600e3;
+    setTimeout(() => due() && syncSoundcloud(), 8000);
+    setInterval(() => due() && syncSoundcloud(), 15 * 60e3);
+  }
+
   $("#nowItem").addEventListener("click", () => control("toggle"));
 
   // ---------- arrastar pra reordenar (com o mouse, sem drag-and-drop do navegador) ----------

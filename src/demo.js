@@ -80,6 +80,12 @@ async function beatWav(bpm, seconds = 30) {
   return buf;
 }
 
+const DEMO_SC_PLAYLISTS = [
+  { name: "treino pesado", url: "https://soundcloud.com/harle/sets/treino", cover: null, count: 6, liked: false },
+  { name: "madrugada", url: "https://soundcloud.com/harle/sets/madrugada", cover: null, count: 6, liked: false },
+  { name: "Phonk Brasil 2026", url: "https://soundcloud.com/outro/sets/phonk", cover: null, count: 6, liked: true },
+];
+
 export function createDemoApi() {
   const listeners = {};
   let idx = 0;
@@ -163,12 +169,20 @@ export function createDemoApi() {
             next: page < 3 ? String(page + 1) : null,
           };
         }
+        case "soundcloud_profile": {
+          await new Promise((r) => setTimeout(r, 700));
+          if (!/\w/.test(args.profile)) throw "Não achei esse perfil no SoundCloud";
+          const name = args.profile.replace(/^.*soundcloud\.com\//, "").split(/[/?#]/)[0] || "harle";
+          return { name, avatar: TRACKS[2].thumb, url: `https://soundcloud.com/${name}`, likesUrl: `https://soundcloud.com/${name}/likes`, likesCount: 6, playlists: DEMO_SC_PLAYLISTS };
+        }
         case "import_playlist": {
           await new Promise((r) => setTimeout(r, 900));
           const sp = args.url.includes("spotify");
+          const likes = /\/likes$/.test(args.url);
+          const scPl = DEMO_SC_PLAYLISTS.find((x) => x.url === args.url);
           return {
             source: sp ? "spotify" : args.url.includes("soundcloud") ? "soundcloud" : "youtube",
-            name: sp ? "Noites de Neon" : "Mix importado",
+            name: sp ? "Noites de Neon" : likes ? "Curtidas no SoundCloud" : scPl ? scPl.name : "Mix importado",
             cover: TRACKS[0].thumb,
             openUrl: sp ? "spotify:playlist:demo" : args.url,
             tracks: TRACKS.map((t, i) => ({ title: t.title, artist: t.artist, cover: sp ? null : t.thumb, url: sp ? `https://open.spotify.com/track/demo${i}` : `https://soundcloud.com/demo/${i}`, durationMs: t.durationMs })),

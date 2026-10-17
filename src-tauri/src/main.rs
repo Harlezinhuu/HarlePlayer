@@ -84,6 +84,14 @@ async fn search_page(service: String, query: String, kind: String, cursor: Optio
         .map_err(|e| e.to_string())?
 }
 
+/// Perfil público do SoundCloud: curtidas e playlists (sem login).
+#[tauri::command]
+async fn soundcloud_profile(profile: String) -> Result<search::Profile, String> {
+    tauri::async_runtime::spawn_blocking(move || search::soundcloud_profile(&profile))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Importa uma playlist pelo link (Spotify, SoundCloud, YouTube).
 #[tauri::command]
 async fn import_playlist(url: String) -> Result<search::ImportedPlaylist, String> {
@@ -506,6 +514,7 @@ fn main() {
             search_music,
             search_page,
             import_playlist,
+            soundcloud_profile,
             soundcloud_audio,
             youtube_audio,
             check_update,
