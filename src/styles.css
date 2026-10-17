@@ -969,3 +969,4 @@ body.mode-wallpaper #partyPanel { display: none !important; }
   text-align: center; font-size: 22px; font-weight: 800; letter-spacing: .12em; font-variant-numeric: tabular-nums; cursor: copy; user-select: all; }
 .yt-code .acc-row { flex-wrap: wrap; }
 .yt-code .acc-row .q-tool { flex: 1; }
+#segDuck.off, .row-sub.off { opacity: .4; pointer-events: none; }

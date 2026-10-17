@@ -82,7 +82,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
 
 ### 🔌 Integrations
 - **Global hotkeys** that work even in games: `Ctrl+Alt+Space` (play/pause), `Ctrl+Alt+→/←` (next/previous), `Ctrl+Alt+↑/↓` (volume) and `Ctrl+Alt+M` (mini player).
-- **Lowers the music when someone talks on Discord**: the app reads Discord's level in the Windows mixer and lowers the music (even Spotify's) while people talk on the call, bringing it back when they stop.
+- **Lowers the music when someone talks on Discord** (optional, under Extras): the app reads Discord's level in the Windows mixer and lowers the music (even Spotify's) while people talk on the call, bringing it back when they stop.
 - **Floating lyrics** (`Ctrl+Alt+L`): lyrics show as subtitles at the bottom of the screen, on top of everything, without blocking clicks.
 - **New song toast**: a card shows in the corner when the song changes (and on volume changes via hotkey), without stealing focus from your game.
 - **Discord Rich Presence**: "Listening to SoundCloud" (or YouTube Music, YouTube…) on your profile, with cover, artist, time bar and a "Listen on …" button. It detects where music is playing by itself, even in the browser.

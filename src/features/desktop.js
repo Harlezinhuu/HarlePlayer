@@ -242,6 +242,8 @@ export function initDesktop(app) {
   function renderExtras() {
     $("#swDucking").classList.toggle("on", settings.ducking);
     $$("#segDuck button").forEach((b) => b.classList.toggle("sel", +b.dataset.v === settings.duckLevel));
+    $("#segDuck").classList.toggle("off", !settings.ducking);
+    $("#segDuck").previousElementSibling?.classList.toggle("off", !settings.ducking);
     $("#swLyricsBar").classList.toggle("on", settings.lyricsbar);
     $("#swDj").classList.toggle("on", settings.dj);
     $$("#segDjEvery button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.djEvery));

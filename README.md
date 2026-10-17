@@ -80,7 +80,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 
 ### 🔌 Integrações
 - **Atalhos globais** que funcionam até dentro de jogo: `Ctrl+Alt+Espaço` (tocar/pausar), `Ctrl+Alt+→/←` (próxima/anterior), `Ctrl+Alt+↑/↓` (volume) e `Ctrl+Alt+M` (mini player).
-- **Abaixa a música quando alguém fala no Discord**: o app lê o volume do Discord no mixer do Windows e abaixa a música (até a do Spotify) enquanto o pessoal fala na call, voltando quando param.
+- **Abaixa a música quando alguém fala no Discord** (opcional, em Extras): o app lê o volume do Discord no mixer do Windows e abaixa a música (até a do Spotify) só enquanto o pessoal fala na call, voltando quando param.
 - **Letra flutuante** (`Ctrl+Alt+L`): a letra aparece como legenda na parte de baixo da tela, por cima de qualquer coisa, sem atrapalhar o clique.
 - **Aviso de música nova**: um cartão aparece no canto da tela quando a música troca (e no volume pelo atalho), sem roubar o foco do jogo.
 - **Discord Rich Presence**: "Ouvindo SoundCloud" (ou YouTube Music, YouTube…) no seu perfil, com capa, artista, barra de tempo e botão "Ouvir no …". Detecta sozinho onde a música está tocando, até no navegador.

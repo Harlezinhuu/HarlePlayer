@@ -84,7 +84,7 @@ const DEFAULTS = {
   eqGains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   notify: true, // aviso de música nova no canto da tela
   autoMini: true, // abre o mini player ao minimizar
-  ducking: true, // abaixa a música quando alguém fala no Discord
+  ducking: false, // abaixa a música quando alguém fala no Discord (opcional: o Windows/Discord já podem fazer isso)
   duckLevel: 0.3, // pra quanto abaixa (fração do volume)
   lyricsbar: false, // letra flutuante na parte de baixo da tela
   dj: false, // DJ com voz entre as músicas
@@ -103,6 +103,12 @@ const DEFAULTS = {
 const settings = { ...DEFAULTS, ...store.get("hp.settings", {}) };
 delete settings.widget; // opção antiga
 const saveSettings = () => store.set("hp.settings", settings);
+// 0.11.1: abaixar no Discord virou opcional (vinha ligado e somava com o do Windows/Discord)
+if (!settings.duckOptIn && !IS_WALLPAPER) {
+  settings.ducking = false;
+  settings.duckOptIn = true;
+  saveSettings();
+}
 /** "Reagir ao som" vale nesta janela? (o wallpaper tem chave própria) */
 const vizOn = () => settings.visualizer && (!IS_WALLPAPER || settings.wallpaperVisualizer);
 
