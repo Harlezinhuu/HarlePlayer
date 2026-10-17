@@ -14,7 +14,9 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 [![Build](https://github.com/Harlezinhuu/HarlePlayer/actions/workflows/build.yml/badge.svg)](https://github.com/Harlezinhuu/HarlePlayer/actions/workflows/build.yml)
 [![Busca ao vivo](https://github.com/Harlezinhuu/HarlePlayer/actions/workflows/search-check.yml/badge.svg)](https://github.com/Harlezinhuu/HarlePlayer/actions/workflows/search-check.yml)
 
-<img src="docs/screenshot.jpg" alt="Harle Player tocando, com relógio, carrossel de capas e letra sincronizada" />
+<img src="docs/demo.gif" alt="Harle Player: relógio, letra sincronizada, carrossel de capas, busca e o modo Freestyle" />
+
+🇺🇸 [Read in English](README.en.md)
 
 </div>
 
@@ -30,6 +32,8 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Volume**: do player interno, ou só do app que está tocando (o Spotify, por exemplo), pelo mixer do Windows, sem mexer no volume do PC inteiro.
 - **Aleatório e repetir** na barra, igual o Spotify: no player interno e também no app de origem, quando ele deixa (o Windows avisa se o app aceita).
 - Teclas de mídia, tocar/pausar, próxima, anterior e barra de progresso clicável.
+
+<img src="docs/screenshot.jpg" alt="Harle Player tocando, com relógio, carrossel de capas e letra sincronizada" />
 
 - **Karaokê com a sua voz**: tira a voz da música (no player interno), deixa a letra grande na tela e liga o **microfone nos seus fones**, com eco e reverb de palco. Dá pra **gravar** e salvar a apresentação.
 - **DJ com voz**: entre as músicas, uma voz em português anuncia o que vai tocar, tipo rádio, usando a sua retrospectiva ("essa é a 5ª vez que você ouve essa essa semana").
@@ -103,6 +107,8 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 
 Vá em [**Releases**](https://github.com/Harlezinhuu/HarlePlayer/releases) e baixe o `Harle.Player_x.x.x_x64-setup.exe`. Depois de instalado, as versões novas chegam sozinhas pelo próprio app.
 
+> **"O Windows protegeu o computador"?** Esse aviso do SmartScreen aparece com todo app que não tem certificado de assinatura digital (é pago e caro pra projeto pessoal). Clique em **Mais informações → Executar assim mesmo**. O instalador é gerado pelo GitHub Actions direto deste código, e dá pra conferir o build de cada versão na aba [Actions](https://github.com/Harlezinhuu/HarlePlayer/actions).
+
 ## 🎮 Configurando o Discord
 
 O Discord mostra o **nome do app** no perfil. Por isso dá pra ter um app pra cada serviço, e o perfil fica "Ouvindo **SoundCloud**", "Ouvindo **YouTube Music**" e assim por diante.
@@ -147,22 +153,22 @@ O `npm run demo` abre o front no navegador com músicas, letra e busca de exempl
 ```
 ┌──────────── Front (src/) ────────────┐        ┌──────────────── Rust (src-tauri/src/) ────────────────┐
 │ HTML + CSS + JS puro, sem build      │        │ media.rs     SMTC do Windows: o que toca + controles  │
-│ app.js     tela, busca, painel       │        │ detect.rs    qual serviço (app ou aba do navegador)   │
-│ player.js  player interno + YouTube  │◀──IPC─▶│ search.rs    SoundCloud · YouTube Music · clipes      │
-│ queue.js   fila (funções puras)      │        │ net.rs       LRCLIB (letras) e Deezer                 │
-│ stats.js   retrospectiva (puras)     │        │ party.rs     salas de ouvir junto (ntfy.sh)           │
-│ lib.js     letra, cores, títulos     │        │ ytdlp.rs     reserva do YouTube                       │
-│ party.js   ouvir junto (AES-GCM)     │        │ volume.rs    volume por app (WASAPI)                  │
-│ drops.js   detector de drop          │        │ visualizer.rs graves do som do PC (WASAPI)            │
-│ fx.js      partículas e explosão     │        │ ducking.rs   voz no Discord → abaixar a música        │
-│ wrappedVideo.js vídeo dos stories    │        │ discord.rs   Rich Presence (named pipe)               │
-│ karaoke.js microfone, efeitos, gravar│        │ wallpaper.rs janela na camada WorkerW                 │
-│ mini.js    mini player               │        │ mini.rs      janelinha sempre por cima                │
-│ remote.html controle pelo celular    │        │ overlay.rs   letra flutuante por cima de tudo         │
-│ qr.js      QR code (sem biblioteca)  │        │ notify.rs    aviso no canto sem roubar o foco         │
-│ rhymes.js  banco de rimas PT/EN      │        │ hotkeys.rs   atalhos globais (RegisterHotKey)         │
-│ bpm.js     BPM e o "1" do compasso   │        │ remote.rs    servidor HTTP na rede local (celular)    │
-│ freestyle.js beat sintetizado, modos │        │ updater.rs   Releases do GitHub → instala e reabre    │
+│ app.js     núcleo (música, letra)    │        │ detect.rs    qual serviço (app ou aba do navegador)   │
+│ features/  uma parte por recurso:    │◀──IPC─▶│ search.rs    SoundCloud · YouTube Music · clipes      │
+│   library.js  fila e playlists       │        │ net.rs       LRCLIB (letras) e Deezer                 │
+│   search.js   busca completa         │        │ party.rs     salas de ouvir junto (ntfy.sh)           │
+│   settings.js configurações          │        │ ytdlp.rs     reserva do YouTube                       │
+│   wrapped.js  retrospectiva          │        │ volume.rs    volume por app (WASAPI)                  │
+│   karaoke · freestyle · party.js     │        │ visualizer.rs graves do som do PC (WASAPI)            │
+│   remote.js   controle pelo celular  │        │ ducking.rs   voz no Discord → abaixar a música        │
+│   desktop.js  aviso, atalhos, DJ     │        │ discord.rs   Rich Presence (named pipe)               │
+│ player.js  player interno + YouTube  │        │ wallpaper.rs janela na camada WorkerW                 │
+│ queue.js · stats.js · lib.js (puras) │        │ mini.rs      janelinha sempre por cima                │
+│ party.js   salas com AES-GCM         │        │ overlay.rs   letra flutuante por cima de tudo         │
+│ drops.js · fx.js   drop e partículas │        │ notify.rs    aviso no canto sem roubar o foco         │
+│ rhymes.js · bpm.js · freestyle.js    │        │ hotkeys.rs   atalhos globais (RegisterHotKey)         │
+│ karaoke.js · wrappedVideo.js · qr.js │        │ remote.rs    servidor HTTP na rede local (celular)    │
+│ mini.js · remote.html (celular)      │        │ updater.rs   Releases do GitHub → instala e reabre    │
 └──────────────────────────────────────┘        └───────────────────────────────────────────────────────┘
 ```
 
@@ -174,12 +180,14 @@ A posição da música é medida pelo app de origem e interpolada no front a cad
 
 A fila guarda quais músicas foram adicionadas por você: elas entram logo depois da atual, antes do resto (resultados da busca ou playlist), igual no Spotify. Música salva só com nome (vinda do Deezer, por exemplo) é procurada no SoundCloud/YouTube na hora de tocar.
 
+O Freestyle descobre o ritmo ouvindo o próprio áudio: mede os "ataques" (subidas de energia), acha o período por autocorrelação conferindo se o padrão se repete no tempo, a cada 2 tempos e a cada compasso (isso evita confundir 90 com 120 ou 67 BPM por causa da síncope do bumbo), refina BPM e fase juntos com um pente de batidas e escolhe como "1" a batida com o ataque mais forte. O beat do app é sintetizado na hora com o Web Audio (bumbo, caixa, chimbal, baixo e acordes), sem nenhum arquivo de som.
+
+No front, o `app.js` guarda o núcleo (música tocando, player, fundo e letra) e cada recurso maior fica em `features/`, recebendo um objeto `app` com o que precisa. Os getters desse objeto sempre devolvem o valor atual, então a música que está tocando, por exemplo, nunca fica desatualizada dentro de um recurso.
+
 ## 🗺️ Próximos passos
 
 - [ ] Iniciar junto com o Windows
 - [ ] Wallpaper em vários monitores
-- [ ] Wallpapers que reagem ao som (visualizador)
-- [ ] Temas e posição dos elementos personalizáveis
 - [ ] Suporte a macOS
 
 ## 📄 Licença
