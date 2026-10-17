@@ -53,3 +53,16 @@ test("artista principal e limpeza", () => {
   assert.deepEqual(Object.keys(s.days), ["2026-10-14"]);
   assert.deepEqual(Object.keys(s.meta), [glass.key]);
 });
+
+test("forget apaga gravações da retrospectiva", () => {
+  const st = S.emptyStats();
+  const d = new Date(2026, 9, 10, 20);
+  S.record(st, { key: "Pill␟Thiago", title: "Pill", artist: "Thiago", service: "spotify" }, 100, d);
+  S.record(st, { key: "Riot Client␟", title: "Riot Client", artist: "", service: "other" }, 50, d);
+  S.countPlay(st, "Riot Client␟", d);
+  const n = S.forget(st, (m) => !m.artist);
+  assert.equal(n, 1);
+  assert.deepEqual(Object.keys(st.meta), ["Pill␟Thiago"]);
+  assert.equal(st.days["2026-10-10"].s.other, 0);
+  assert.equal(S.summarize(st).tracks.length, 1);
+});

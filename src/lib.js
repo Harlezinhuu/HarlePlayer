@@ -98,3 +98,20 @@ export function parseLrc(text) {
 // Quando o site não informa a música, o navegador manda um texto genérico.
 const PLACEHOLDER = /^(um site está (com mídia aberta|reproduzindo)|a site is (playing|using) (media|audio)|un sitio (está reproduciendo|tiene)|une? site)/i;
 export const isPlaceholderTitle = (t) => PLACEHOLDER.test(String(t || "").trim());
+
+// ---------- o que não é música (jogo, gravação de tela, vídeo) ----------
+// Jogos, launchers e gravadores: nunca contam como música.
+const GAME_APPS = /riot|valorant|league ?of ?legends|leagueclient|steam|epic ?games|battle\.?net|xboxapp|gamebar|medal|\bobs|streamlabs|geforce|nvidia|shadowplay|outplayed|overwolf|minecraft|roblox|fortnite|counter-?strike|\bcs2\b/i;
+// Players de vídeo: só contam se o arquivo tiver artista (mp3 no VLC conta; gravação não).
+const VIDEO_APPS = /zunevideo|movies|filmes|photos|fotos|clipchamp|vlc|potplayer|mpc-?(hc|be)|\bmpv\b|kmplayer|gom ?player|media ?player ?classic/i;
+// Título com cara de arquivo de vídeo/gravação: "Valorant 2026.03.21 - 21.30.45.01", "clip.mp4"…
+const FILE_LIKE = /\.(mp4|mkv|mov|avi|webm|wmv|flv|m4v|ts)$|\b(19|20)\d\d[.\-_](0[1-9]|1[0-2])[.\-_](0[1-9]|[12]\d|3[01])\b|^(clip|replay|highlight|recording|gravação|captura)\b/i;
+
+/** Sessão de mídia que não é música (não entra em Recentes, retrospectiva, Discord…). */
+export function isNonMusic({ title = "", artist = "", source = "" } = {}) {
+  const t = String(title).trim(), a = String(artist || "").trim(), src = String(source || "");
+  if (!t) return false;
+  if (GAME_APPS.test(src)) return true;
+  if (a) return false;
+  return VIDEO_APPS.test(src) || FILE_LIKE.test(t) || GAME_APPS.test(t);
+}

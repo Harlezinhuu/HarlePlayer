@@ -2,7 +2,7 @@
 
 import * as Stats from "../stats.js";
 import { recordWrappedVideo, DURATION as VIDEO_SECONDS } from "../wrappedVideo.js";
-import { esc, cleanTitle, cleanArtist } from "../lib.js";
+import { esc, cleanTitle, cleanArtist, isNonMusic } from "../lib.js";
 
 /** `app` = o que esta parte usa do resto do app (ver app.js). */
 export function initWrapped(app) {
@@ -12,6 +12,10 @@ export function initWrapped(app) {
     stats = { ...Stats.emptyStats(), ...(store.get("hp.stats", null) || {}) };
   } catch {}
   let statsDirty = false;
+  // tira o que entrou antes do filtro (gravações de jogo, "Riot Client"…)
+  if (!IS_WALLPAPER && Stats.forget(stats, (m) => isNonMusic(m))) {
+    try { store.set("hp.stats", stats); } catch {}
+  }
   const saveStats = () => {
     if (!statsDirty || IS_WALLPAPER) return;
     statsDirty = false;

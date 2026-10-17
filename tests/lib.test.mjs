@@ -112,3 +112,21 @@ test("equalizador: 10 faixas e pré-ganho pra não estourar", () => {
   const p = eqPreamp([9, 3, 0]);
   assert.ok(p < 1 && p > 0.4, String(p));
 });
+
+import { isNonMusic } from "../src/lib.js";
+test("jogo, gravação e vídeo não contam como música", () => {
+  // o que apareceu nos Recentes
+  assert.ok(isNonMusic({ title: "Riot Client", artist: "", source: "Riot Client" }));
+  assert.ok(isNonMusic({ title: "Riot Client", artist: "" }));
+  assert.ok(isNonMusic({ title: "Valorant 2026.03.21 - 21.30.45.01", artist: "" }));
+  assert.ok(isNonMusic({ title: "Valorant 2026.03.21 - 21.30.45.01.DVR", artist: "", source: "Microsoft.ZuneVideo_8wekyb3d8bbwe!Microsoft.ZuneVideo" }));
+  assert.ok(isNonMusic({ title: "clip.mp4", artist: "" }));
+  assert.ok(isNonMusic({ title: "qualquer coisa", artist: "", source: "vlc.exe" }));
+  // música continua sendo música
+  assert.ok(!isNonMusic({ title: "Pill", artist: "Thiago", source: "Spotify.exe" }));
+  assert.ok(!isNonMusic({ title: "Bahia", artist: "Alee", source: "chrome.exe" }));
+  assert.ok(!isNonMusic({ title: "Pill", artist: "Thiago Kelbert - Topic", source: "msedge.exe" }));
+  assert.ok(!isNonMusic({ title: "Minha Música", artist: "Artista", source: "vlc.exe" })); // mp3 com tag no VLC
+  assert.ok(!isNonMusic({ title: "Ao Vivo 2019", artist: "" , source: "Spotify.exe" })); // ano sozinho não é data de gravação
+  assert.ok(!isNonMusic({ title: "", artist: "" }));
+});

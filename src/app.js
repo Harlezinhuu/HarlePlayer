@@ -10,7 +10,7 @@
 import { createPlayer } from "./player.js";
 import { createDropDetector } from "./drops.js";
 import { createFx, paletteOf } from "./fx.js";
-import { fmt, esc, rgbToHsl, hslToRgb, slotOf, cleanTitle, cleanArtist, lyricVariants, parseLrc, isPlaceholderTitle } from "./lib.js";
+import { fmt, esc, rgbToHsl, hslToRgb, slotOf, cleanTitle, cleanArtist, lyricVariants, parseLrc, isPlaceholderTitle, isNonMusic } from "./lib.js";
 import { initRemote } from "./features/remote.js";
 import { initParty } from "./features/party.js";
 import { initFreestyle } from "./features/freestyle.js";
@@ -125,7 +125,7 @@ if (!SERVICES[settings.service]) settings.service = "spotify";
 // Estado
 // ===================================================================
 let media = { available: false, title: "", artist: "", album: "", source: "", playing: false, positionMs: 0, durationMs: 0, updatedAtMs: Date.now(), thumb: null, service: "" };
-let history = store.get("hp.history", []);
+let history = store.get("hp.history", []).filter((h) => !isNonMusic(h)); // limpa jogos/vídeos que entraram antes
 let lastThumb = null;
 let focusOffset = 0;
 let lyrics = null; // { key, lines: [{ t, end, text, chunks: [{ t, text }] }] }
@@ -723,6 +723,7 @@ const app = {
   get remoteUi() { return remoteUi; },
   get renderQueue() { return libraryUi.renderQueue; },
   get runSearch() { return runSearch; },
+  get saveHistory() { return saveHistory; },
   get saveRecording() { return karaokeUi.saveRecording; },
   get saveSettings() { return saveSettings; },
   get searchTimer() { return searchTimer; }, set searchTimer(v) { searchTimer = v; },
@@ -1665,6 +1666,9 @@ function onMedia(s, fromLocal = false) {
   // Site que não informa a música (o navegador manda "Um site está com mídia aberta"):
   // continua dando pra controlar, mas sem nome, letra, histórico ou Discord.
   if (s && isPlaceholderTitle(s.title)) s = { ...s, title: "", artist: "", album: "", generic: true };
+  // Jogo, gravação de tela ou vídeo (Riot Client, "Valorant 2026.03.21 - …"): também não é
+  // música — dá pra controlar, mas não entra em Recentes, retrospectiva, letra nem Discord.
+  else if (s && !s.local && isNonMusic(s)) s = { ...s, title: "", artist: "", album: "", generic: true, notMusic: true };
   const prevKey = keyOf(media);
   media = s;
   const k = keyOf(s);

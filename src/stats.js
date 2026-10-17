@@ -36,6 +36,23 @@ export function countPlay(stats, key, date = new Date()) {
   return stats;
 }
 
+/** Apaga da retrospectiva as músicas em que `test(meta)` for verdadeiro (ex.: gravações de jogo). */
+export function forget(stats, test) {
+  const gone = new Set(Object.entries(stats.meta).filter(([, m]) => test(m)).map(([k]) => k));
+  if (!gone.size) return 0;
+  for (const d of Object.values(stats.days)) {
+    for (const k of gone) {
+      const row = d.t[k];
+      if (!row) continue;
+      const svc = stats.meta[k].service || "other";
+      if (d.s[svc]) d.s[svc] = Math.max(0, d.s[svc] - row[0]);
+      delete d.t[k];
+    }
+  }
+  for (const k of gone) delete stats.meta[k];
+  return gone.size;
+}
+
 /** Primeiro artista de "A, B & C feat. D". */
 export function mainArtist(a) {
   // "&" não separa (dupla tipo "Simon & Garfunkel"); "x" só com nome dos dois lados ("Lil Nas X" fica inteiro)

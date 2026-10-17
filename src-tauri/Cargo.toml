@@ -1,6 +1,6 @@
 [package]
 name = "harle-player"
-version = "0.10.0"
+version = "0.10.1"
 description = "Player de música estético pro desktop — funciona com Spotify, YouTube Music, SoundCloud e Apple Music"
 authors = ["Harle"]
 license-file = "../LICENSE"

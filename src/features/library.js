@@ -130,7 +130,7 @@ export function initLibrary(app) {
       tools.innerHTML = "";
       const items = app.history.filter((h) => h.key !== curKey).slice(0, 20);
       html = items.length
-        ? items.map((h) => `<li data-hk="${esc(h.key)}" title="Tocar">${queueItemHtml(h, false)}</li>`).join("")
+        ? items.map((h) => `<li data-hk="${esc(h.key)}" title="Tocar">${queueItemHtml(h, false, `<button class="q-rm" data-hrm="${esc(h.key)}" title="Tirar dos recentes">${ICON.x}</button>`)}</li>`).join("")
         : `<li class="q-empty">O que você ouvir aparece aqui.</li>`;
     } else if (openPlaylistId === ACC) {
       tools.innerHTML = `
@@ -297,6 +297,13 @@ export function initLibrary(app) {
     if (e.target.closest(".q-label, .q-empty")) return;
     const li = e.target.closest("li");
     if (!li || li.dataset.dragged) return;
+    const hrm = e.target.closest("[data-hrm]");
+    if (hrm) {
+      const i = app.history.findIndex((h) => h.key === hrm.dataset.hrm);
+      if (i >= 0) app.history.splice(i, 1);
+      app.saveHistory();
+      return renderQueue(true);
+    }
     const rm = e.target.closest("[data-rm], [data-prm]");
     if (rm) {
       if (rm.dataset.rm !== undefined) player?.queue.remove(+rm.dataset.rm);
