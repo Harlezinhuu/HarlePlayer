@@ -20,9 +20,11 @@ export function initSettings(app) {
     document.querySelectorAll("#segClock button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.clockStyle));
     $("#swDiscord").classList.toggle("on", settings.discord);
     $("#swVisualizer").classList.toggle("on", settings.visualizer);
+    $("#swWallViz").classList.toggle("on", settings.visualizer && settings.wallpaperVisualizer);
+    $("#rowWallViz").classList.toggle("off", !settings.visualizer);
     $("#swParticles").classList.toggle("on", settings.particles);
     $("#swDropFx").classList.toggle("on", settings.dropFx);
-    document.body.classList.toggle("no-visualizer", !settings.visualizer);
+    document.body.classList.toggle("no-visualizer", !app.vizOn());
     $("#swDiscordSpotify").classList.toggle("on", settings.discordSpotify);
     $("#segBrowser").innerHTML = ["soundcloud", "ytmusic", "youtube"]
       .map((id) => `<button data-v="${id}" class="${id === settings.browserService ? "sel" : ""}">${esc(SERVICES[id].name)}</button>`)
@@ -271,6 +273,13 @@ export function initSettings(app) {
     renderSettings();
     applyFx();
     api.invoke("set_visualizer", { on: settings.visualizer }).catch(() => {});
+  });
+  $("#swWallViz").addEventListener("click", () => {
+    if (!settings.visualizer) return toast("Ligue o \"Reagir ao som\" primeiro");
+    settings.wallpaperVisualizer = !settings.wallpaperVisualizer;
+    saveSettings(); // o wallpaper recarrega sozinho quando as configurações mudam
+    renderSettings();
+    toast(settings.wallpaperVisualizer ? "O wallpaper volta a pulsar com o som" : "Wallpaper parado: só o app reage ao som");
   });
   $("#btnLyrics").addEventListener("click", toggleLyrics);
   // ---------- mini player automático ao minimizar ----------

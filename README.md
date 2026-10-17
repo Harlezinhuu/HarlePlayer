@@ -67,7 +67,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Letra sincronizada** via [LRCLIB](https://lrclib.net): o verso inteiro com as palavras acendendo no estilo karaokê, ou em pedaços grandes animados.
 - **Clipe no fundo**: o clipe oficial da música que está tocando (até no Spotify) aparece no fundo, mudo e sincronizado com a música.
 - **Partículas e drop**: partículas dançam no grave e, quando a música "dropa", a tela pisca, treme e a capa explode em pedaços.
-- **Reage ao som**: o fundo, o brilho do relógio e a capa pulsam com o grave da música que está tocando, de qualquer app (inclusive no wallpaper).
+- **Reage ao som**: o fundo, o brilho do relógio e a capa pulsam com o grave da música que está tocando, de qualquer app. No wallpaper é opcional, pra quem prefere a área de trabalho parada.
 - **Mini player**: uma janelinha sempre por cima de tudo, no canto da tela, com capa e controles. Abre sozinho quando você minimiza o app com música tocando e some quando você volta. É só arrastar pra onde quiser.
 - **Tela cheia** (`F11`): os controles somem sozinhos e fica só o relógio, a capa e a letra, tipo tela de descanso.
 - **Carrossel 3D de capas** com o que você ouviu por último. Dá pra girar com a roda do mouse ou com as setas ← →.

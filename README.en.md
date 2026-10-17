@@ -69,7 +69,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
 - **Synced lyrics** via [LRCLIB](https://lrclib.net): the whole line with words lighting up karaoke style, or in big animated chunks.
 - **Music video background**: the official video of the song that's playing (even on Spotify) shows in the background, muted and synced.
 - **Particles and drops**: particles dance to the bass and, when the song "drops", the screen flashes, shakes and the cover explodes into pieces.
-- **Reacts to sound**: the background, the clock's glow and the cover pulse with the bass of whatever is playing, from any app (wallpaper mode included).
+- **Reacts to sound**: the background, the clock's glow and the cover pulse with the bass of whatever is playing, from any app. On the wallpaper it's optional, for those who prefer a still desktop.
 - **Mini player**: a small always-on-top window in the corner with cover and controls. It opens by itself when you minimize the app while music is playing and hides when you come back. Drag it anywhere.
 - **Fullscreen** (`F11`): the controls fade away, leaving just the clock, cover and lyrics, like a screensaver.
 - **3D cover carousel** with what you played recently. Spin it with the mouse wheel or the ← → keys.

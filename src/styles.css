@@ -940,3 +940,7 @@ body.mode-wallpaper #partyPanel { display: none !important; }
 #fsEndStats .words em.ok { background: rgba(var(--accent), .3); }
 .fs-end-btns { display: flex; gap: 10px; }
 .fs-end-btns .btn { flex: 1; height: 40px; }
+
+/* sub-opção (depende da chave de cima) */
+.toggle-row.sub { padding-left: 16px; border-left: 2px solid rgba(255,255,255,.08); margin-left: 4px; }
+.toggle-row.sub.off { opacity: .45; }

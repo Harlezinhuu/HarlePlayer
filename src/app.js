@@ -69,6 +69,7 @@ const DEFAULTS = {
   volume: 0.8, // volume do player interno (0–1)
   queueTab: "fila", // "fila" | "recentes" | "playlists"
   visualizer: true, // fundo/relógio/capa reagem ao grave
+  wallpaperVisualizer: true, // ...e no wallpaper também
   particles: true, // partículas no fundo
   dropFx: true, // efeitos no drop
   remote: false, // controle pelo celular (servidor na rede local)
@@ -102,6 +103,8 @@ const DEFAULTS = {
 const settings = { ...DEFAULTS, ...store.get("hp.settings", {}) };
 delete settings.widget; // opção antiga
 const saveSettings = () => store.set("hp.settings", settings);
+/** "Reagir ao som" vale nesta janela? (o wallpaper tem chave própria) */
+const vizOn = () => settings.visualizer && (!IS_WALLPAPER || settings.wallpaperVisualizer);
 
 // url: abre no app/site · web: link https (usado no botão do Discord)
 const enc = encodeURIComponent;
@@ -744,6 +747,7 @@ const app = {
   get toast() { return toast; },
   get toggleLyrics() { return settingsUi.toggleLyrics; },
   get trackFrom() { return libraryUi.trackFrom; },
+  get vizOn() { return vizOn; },
   get vol() { return vol; },
 };
 
@@ -1105,7 +1109,7 @@ let beat = 0;
 let beatTarget = 0;
 let beatShown = -1;
 function updateBeat() {
-  const on = settings.visualizer && media.available && media.playing;
+  const on = vizOn() && media.available && media.playing;
   const target = on ? beatTarget : 0;
   beat += (target - beat) * (target > beat ? 0.55 : 0.12); // sobe rápido, desce devagar
   if (beat < 0.004) beat = 0;
@@ -1126,7 +1130,7 @@ function fxOrigin() {
   return r && r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2, el } : { x: innerWidth / 2, y: innerHeight / 2, el: null };
 }
 function onBeatLevel(v) {
-  if (!settings.visualizer || !media.playing) return;
+  if (!vizOn() || !media.playing) return;
   const r = drops.feed(v, performance.now());
   if (!settings.particles) return;
   const o = fxOrigin();
@@ -1148,7 +1152,7 @@ function dropNow(o = fxOrigin()) {
   card?.classList.add("drop-pop");
 }
 function applyFx() {
-  if (settings.visualizer && settings.particles) fx.start();
+  if (vizOn() && settings.particles) fx.start();
   else fx.stop();
 }
 
