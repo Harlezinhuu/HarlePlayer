@@ -60,6 +60,26 @@ function toneWav(seconds) {
   return buf;
 }
 
+/** Beat de verdade pro demo do freestyle (o sintetizador do app, renderizado em WAV). */
+async function beatWav(bpm, seconds = 30) {
+  const { createBeat } = await import("./freestyle.js");
+  const rate = 22050;
+  const ctx = new OfflineAudioContext(1, rate * seconds, rate);
+  const beat = createBeat(ctx, ctx.destination);
+  beat.start("boombap", bpm);
+  beat.fill(seconds);
+  const d = (await ctx.startRendering()).getChannelData(0);
+  const buf = new ArrayBuffer(44 + d.length * 2);
+  const v = new DataView(buf);
+  const str = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF"); v.setUint32(4, 36 + d.length * 2, true); str(8, "WAVE"); str(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, "data"); v.setUint32(40, d.length * 2, true);
+  for (let i = 0; i < d.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i])) * 26000, true);
+  return buf;
+}
+
 export function createDemoApi() {
   const listeners = {};
   let idx = 0;
@@ -118,6 +138,14 @@ export function createDemoApi() {
         }
         case "search_music": {
           await new Promise((r) => setTimeout(r, 600));
+          if (/instrumental/i.test(args.query)) {
+            const name = args.query.replace(/instrumental/i, "").trim();
+            return {
+              source: args.service,
+              tracks: TRACKS.slice(0, 3).map((t, i) => ({ title: i ? `${name} (remix)` : `${name} (Instrumental)`, artist: t.artist, cover: t.thumb, url: `https://soundcloud.com/demo/beat-${92 + i * 6}`, durationMs: 30000 })),
+              artists: [],
+            };
+          }
           return {
             source: args.service,
             tracks: [...TRACKS, ...TRACKS].map((t) => ({ title: `${t.title} (remix)`, artist: t.artist, cover: t.thumb, url: args.service === "ytmusic" ? "https://music.youtube.com/" : "https://soundcloud.com/", durationMs: t.durationMs })),
@@ -167,6 +195,8 @@ export function createDemoApi() {
         case "youtube_audio":
         case "soundcloud_audio": {
           await new Promise((r) => setTimeout(r, 500));
+          const bm = /beat-(\d+)/.exec(args.url || "");
+          if (bm) return beatWav(+bm[1]);
           return toneWav(6);
         }
         case "discord_set":

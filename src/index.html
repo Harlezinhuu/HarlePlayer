@@ -148,6 +148,9 @@
       <button id="btnKaraoke" class="tool-btn" title="Karaokê (tira a voz e liga o microfone)" aria-label="Karaokê">
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" /></svg>
       </button>
+      <button id="btnFreestyle" class="tool-btn" title="Freestyle (jogo de rima no beat)" aria-label="Freestyle">
+        <svg viewBox="0 0 24 24"><path d="M4 18c3-1 4-4 4-7s2-6 5-6 4 2 4 4-2 3-4 3-3 2-3 4 2 3 4 3 4-1 5-2" /><circle cx="19" cy="6" r="1.4" class="fill-soft" /></svg>
+      </button>
       <button id="btnWrapped" class="tool-btn" title="Sua retrospectiva (o que você mais ouviu)" aria-label="Retrospectiva">
         <svg viewBox="0 0 24 24"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9" /></svg>
       </button>
@@ -445,6 +448,68 @@
       <button id="kRec" class="k-rec"><i></i><span id="kRecTime">Gravar</span></button>
     </div>
     <p class="k-hint">Use fone de ouvido 🎧 · a voz sai melhor em músicas com o vocal no centro</p>
+  </section>
+
+  <!-- ===== Freestyle (jogo de rima) ===== -->
+  <section id="freestyle" hidden>
+    <div class="fs-top">
+      <b>🎙️ Freestyle</b>
+      <button id="fsClose" class="win-btn" aria-label="Fechar"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+    </div>
+
+    <div id="fsSetup" class="glass fs-card">
+      <h2>Bora rimar?</h2>
+      <p class="muted">Toca o beat, aparece a palavra e você tem que fechar a frase rimando com ela antes da próxima.</p>
+      <div class="fs-row"><span>Modo</span>
+        <div class="seg" id="fsMode">
+          <button data-v="treino" class="sel">Treino <small>palavra a cada 2 compassos, com dicas</small></button>
+          <button data-v="desafio">Desafio <small>1 minuto, tema, palavra todo compasso</small></button>
+        </div>
+      </div>
+      <div class="fs-row"><span>Idioma das rimas</span>
+        <div class="seg" id="fsLang"><button data-v="pt" class="sel">🇧🇷 Português</button><button data-v="en">🇺🇸 English</button></div>
+      </div>
+      <div class="fs-row"><span>Beat</span>
+        <div class="seg" id="fsSource"><button data-v="app" class="sel">Beat do app</button><button data-v="song">Instrumental de uma música</button></div>
+      </div>
+      <div id="fsAppBeat" class="fs-row sub">
+        <div class="seg" id="fsStyle"><button data-v="boombap" class="sel">Boom bap</button><button data-v="trap">Trap</button><button data-v="lofi">Lo-fi</button></div>
+        <label class="k-sl"><span>BPM <b id="fsBpmVal">90</b></span><input type="range" class="rng" id="fsBpm" min="70" max="150" value="90" /></label>
+      </div>
+      <div id="fsSongBeat" class="fs-row sub" hidden>
+        <form id="fsSearch"><input id="fsQuery" placeholder="Nome da música (ex.: Negro Drama)" autocomplete="off" /><button class="btn">Buscar</button></form>
+        <div id="fsResults"></div>
+        <p class="muted small">Se o nome não tiver "instrumental" ou "beat", o app tira a voz sozinho (fica melhor com instrumental de verdade).</p>
+      </div>
+      <button id="fsStart" class="btn primary fs-go">Começar</button>
+    </div>
+
+    <div id="fsStage" hidden>
+      <div id="fsTheme"></div>
+      <div id="fsWordBox">
+        <div id="fsCount"></div>
+        <div id="fsWord">—</div>
+        <div id="fsHints"></div>
+      </div>
+      <div id="fsBeats"><i></i><i></i><i></i><i></i></div>
+      <div id="fsBar"><i></i></div>
+      <div id="fsNext"></div>
+      <div id="fsInfo"></div>
+      <div id="fsTempo" hidden><button id="fsHalf" class="btn" title="Palavras rápidas demais">÷2</button><span id="fsBpmNow"></span><button id="fsDouble" class="btn" title="Palavras devagar demais">×2</button><small>bata <kbd>T</kbd> 4× no ritmo pra corrigir</small></div>
+      <div class="fs-ctrl glass">
+        <button id="fsMic" class="k-mic"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg><span>Ligar microfone</span></button>
+        <button id="fsHit" class="btn">✔ Rimei <kbd>Espaço</kbd></button>
+        <button id="fsTap" class="btn" title="Se a palavra estiver fora do tempo, aperte no começo do compasso (no &quot;1&quot;)">Acertar o tempo <kbd>T</kbd></button>
+        <button id="fsRec" class="k-rec"><i></i><span id="fsRecTime">Gravar</span></button>
+        <button id="fsStop" class="btn">Parar</button>
+      </div>
+    </div>
+
+    <div id="fsEnd" class="glass fs-card" hidden>
+      <h2 id="fsEndTitle">Fim do desafio!</h2>
+      <div id="fsEndStats"></div>
+      <div class="fs-end-btns"><button id="fsAgain" class="btn primary">De novo</button><button id="fsBack" class="btn">Trocar beat/modo</button></div>
+    </div>
   </section>
 
   <!-- ===== Retrospectiva ("seu Wrapped") ===== -->

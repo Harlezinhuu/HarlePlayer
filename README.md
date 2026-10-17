@@ -36,6 +36,13 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 
 - **Ouvir junto**: crie uma sala, mande o código e o que você tocar toca no app dos seus amigos, no mesmo segundo (pausa, pula e volta junto). Cada um ouve no próprio PC, pelo Harle Player ou abrindo no próprio Spotify. Tem reações com emoji na tela de todo mundo e pedidos de música. As mensagens passam pelo [ntfy.sh](https://ntfy.sh), **criptografadas** (AES-GCM) com uma chave que só existe no código de convite.
 
+### 🎙️ Freestyle
+- **Jogo de rima no beat**: toca o beat e, a cada compasso, aparece uma palavra pra você fechar a frase rimando com ela. A próxima já aparece embaixo, e as bolinhas marcam o tempo.
+- **Treino**: palavra a cada 2 compassos, com dicas de rima. **Desafio**: 1 minuto, um tema que muda, palavra todo compasso e rimas cada vez mais difíceis. No fim, mostra quantas você rimou.
+- **Português ou inglês**: bancos de rima separados por família de som, com rimas fáceis e difíceis.
+- **Beat do app** (boom bap, trap ou lo-fi, no BPM que quiser, sintetizado na hora) ou **o instrumental de qualquer música**: o app procura no YouTube Music e no SoundCloud, descobre o BPM e onde cai o "1" do compasso ouvindo o áudio. Se não achar instrumental, tira a voz.
+- Microfone nos fones e **gravação** do freestyle, igual ao karaokê.
+
 ### 🔎 Buscar
 - **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…).
 - **Abas Tudo · Músicas · Artistas**: os principais resultados e a lista completa, que carrega mais conforme você rola. Clicou numa música, ela toca e o resto da lista vira a fila.
@@ -86,6 +93,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 | `Ctrl+Alt+Espaço` / `→` / `←` / `↑` / `↓` / `M` / `L` | Atalhos globais: tocar/pausar, próxima, anterior, volume, mini player, letra flutuante |
 | `F11` (ou duplo clique no topo) | Tela cheia: depois de 3 s parado, sobra só relógio, capa e letra |
 | `Esc` | Fechar busca / configurações / sair da tela cheia |
+| `Espaço` / `T` (no freestyle) | Marcar que rimou / acertar o tempo (4 toques redefinem o BPM) |
 | Clique direito numa música | Tocar a seguir, adicionar à fila ou a uma playlist |
 | Roda do mouse no 🔊 | Ajustar o volume |
 
@@ -150,10 +158,10 @@ O `npm run demo` abre o front no navegador com músicas, letra e busca de exempl
 │ mini.js    mini player               │        │ mini.rs      janelinha sempre por cima                │
 │ remote.html controle pelo celular    │        │ overlay.rs   letra flutuante por cima de tudo         │
 │ qr.js      QR code (sem biblioteca)  │        │ notify.rs    aviso no canto sem roubar o foco         │
-└──────────────────────────────────────┘        │ hotkeys.rs   atalhos globais (RegisterHotKey)         │
-                                                │ remote.rs    servidor HTTP na rede local (celular)    │
-                                                │ updater.rs   Releases do GitHub → instala e reabre    │
-                                                └───────────────────────────────────────────────────────┘
+│ rhymes.js  banco de rimas PT/EN      │        │ hotkeys.rs   atalhos globais (RegisterHotKey)         │
+│ bpm.js     BPM e o "1" do compasso   │        │ remote.rs    servidor HTTP na rede local (celular)    │
+│ freestyle.js beat sintetizado, modos │        │ updater.rs   Releases do GitHub → instala e reabre    │
+└──────────────────────────────────────┘        └───────────────────────────────────────────────────────┘
 ```
 
 O modo wallpaper usa o mesmo truque do Wallpaper Engine e do Lively: o Explorer cria uma camada chamada **WorkerW** entre o papel de parede e os ícones, e o app pendura uma segunda janela nela. 
