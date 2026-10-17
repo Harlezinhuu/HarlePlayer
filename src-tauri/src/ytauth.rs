@@ -28,6 +28,12 @@ pub fn available() -> bool {
     client().is_ok()
 }
 
+/// Corpo da resposta em JSON (o ureq daqui não tem o recurso "json").
+fn json(r: ureq::Response) -> Result<Value, String> {
+    let t = r.into_string().map_err(|e| e.to_string())?;
+    serde_json::from_str(&t).map_err(|e| e.to_string())
+}
+
 fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new().timeout(Duration::from_secs(20)).build()
 }
@@ -36,7 +42,7 @@ fn agent() -> ureq::Agent {
 fn google_err(e: ureq::Error) -> (u16, String) {
     match e {
         ureq::Error::Status(code, resp) => {
-            let body: Value = resp.into_json().unwrap_or(Value::Null);
+            let body: Value = json(resp).unwrap_or(Value::Null);
             let msg = body["error"]["message"].as_str()
                 .or_else(|| body["error"].as_str())
                 .unwrap_or("erro do Google")
@@ -128,9 +134,8 @@ pub fn login_start() -> Result<LoginCode, String> {
     let v: Value = agent()
         .post("https://oauth2.googleapis.com/device/code")
         .send_form(&[("client_id", id), ("scope", SCOPE)])
-        .map_err(|e| format!("Google: {}", google_err(e).1))?
-        .into_json()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Google: {}", google_err(e).1))
+        .and_then(json)?;
     let code = LoginCode {
         user_code: v["user_code"].as_str().ok_or("Google não mandou o código")?.to_string(),
         verification_url: v["verification_url"].as_str().or(v["verification_uri"].as_str()).unwrap_or("https://www.google.com/device").to_string(),
@@ -170,7 +175,7 @@ pub fn login_poll() -> Result<&'static str, String> {
     ]);
     match res {
         Ok(r) => {
-            let v: Value = r.into_json().map_err(|e| e.to_string())?;
+            let v: Value = json(r)?;
             let refresh = v["refresh_token"].as_str().ok_or("Google não mandou a chave")?;
             save_refresh(refresh)?;
             if let Some(acc) = v["access_token"].as_str() {
@@ -237,9 +242,8 @@ fn access_token() -> Result<String, String> {
             } else {
                 format!("Google: {msg}")
             }
-        })?
-        .into_json()
-        .map_err(|e| e.to_string())?;
+        })
+        .and_then(json)?;
     let acc = v["access_token"].as_str().ok_or("Google não mandou o acesso")?.to_string();
     let ttl = v["expires_in"].as_u64().unwrap_or(3600).saturating_sub(60);
     *ACCESS.lock().unwrap() = Some((acc.clone(), Instant::now() + Duration::from_secs(ttl)));
@@ -259,9 +263,8 @@ fn api(path: &str) -> Result<Value, String> {
             } else {
                 format!("YouTube: {msg}")
             }
-        })?
-        .into_json()
-        .map_err(|e| e.to_string())
+        })
+        .and_then(json)
 }
 
 /// Lista paginada da API (pageToken), até `max` itens.
