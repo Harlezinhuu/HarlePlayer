@@ -55,6 +55,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
 <img src="docs/freestyle.jpg" alt="Freestyle: the word to rhyme in the center, hints below and the beats of the bar" />
 
 ### 🔎 Search
+- **Paste a link and it plays**: a song link from YouTube, YouTube Music (even `youtu.be` and Shorts) or SoundCloud in the search box, or `Ctrl+V` anywhere in the app, and it starts playing. Spotify links open in the Spotify app (counts toward Wrapped).
 - **Searches SoundCloud and YouTube Music directly**, including tracks that only exist on SoundCloud (remixes, unreleased…).
 - **All · Songs · Artists tabs**: top results and the full list, which loads more as you scroll. Click a song and it plays, with the rest of the list becoming the queue.
 - For other services, or if the site's search fails, results come from Deezer.
@@ -100,6 +101,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
 |---|---|
 | `Space` | Play / pause |
 | `/` or `Ctrl+K` | Search |
+| `Ctrl+V` with a link | Play the song (or import the playlist) |
 | `←` `→` | Spin the carousel |
 | `Ctrl+Alt+Space` / `→` / `←` / `↑` / `↓` / `M` / `L` | Global hotkeys: play/pause, next, previous, volume, mini player, floating lyrics |
 | `F11` (or double-click the top) | Fullscreen: after 3 s idle, only the clock, cover and lyrics remain |

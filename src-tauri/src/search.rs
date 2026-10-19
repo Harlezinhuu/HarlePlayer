@@ -134,6 +134,72 @@ pub struct Profile {
     pub playlists: Vec<ProfilePlaylist>,
 }
 
+// =====================================================================
+// Link de UMA música (colar na busca e tocar)
+// =====================================================================
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkedTrack {
+    /// "soundcloud" | "youtube"
+    pub source: String,
+    pub track: Track,
+}
+
+/// Id do vídeo em watch?v=, youtu.be/, shorts/, embed/, live/ (music.youtube.com também).
+pub fn youtube_video_id(url: &str) -> Option<String> {
+    let u = url.trim();
+    let lower = u.to_lowercase();
+    if !(lower.contains("youtube.com/") || lower.contains("youtu.be/")) {
+        return None;
+    }
+    let ok = |id: &str| id.len() == 11 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if let Some(q) = u.split_once('?').map(|x| x.1) {
+        if let Some(v) = q.split(['&', '#']).find_map(|kv| kv.strip_prefix("v=")) {
+            if ok(v) {
+                return Some(v.to_string());
+            }
+        }
+    }
+    for mark in ["youtu.be/", "/shorts/", "/embed/", "/live/"] {
+        if let Some(rest) = u.split(mark).nth(1) {
+            let id = rest.split(['?', '&', '#', '/']).next().unwrap_or("");
+            if ok(id) {
+                return Some(id.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Música pelo link (SoundCloud ou YouTube). Playlist/perfil → erro (o app importa).
+pub fn track_from_link(url: &str) -> Result<LinkedTrack, String> {
+    if let Some(id) = youtube_video_id(url) {
+        let watch = format!("https://www.youtube.com/watch?v={id}");
+        let meta: Value = http_get(&format!("https://www.youtube.com/oembed?url={}&format=json", enc(&watch)))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or(Value::Null);
+        if meta.is_null() {
+            return Err("Esse vídeo não existe, é privado ou não deixa tocar fora do YouTube".into());
+        }
+        return Ok(LinkedTrack {
+            source: "youtube".into(),
+            track: Track {
+                title: meta["title"].as_str().unwrap_or("Vídeo do YouTube").to_string(),
+                artist: meta["author_name"].as_str().unwrap_or("").trim_end_matches(" - Topic").to_string(),
+                cover: Some(format!("https://i.ytimg.com/vi/{id}/hqdefault.jpg")),
+                url: watch,
+                duration_ms: None,
+                rank: 1,
+            },
+        });
+    }
+    if url.to_lowercase().contains("soundcloud.com/") || url.to_lowercase().contains("on.soundcloud.com") {
+        return soundcloud::track_link(url).map(|track| LinkedTrack { source: "soundcloud".into(), track });
+    }
+    Err("Link não reconhecido (cole um link do YouTube, YouTube Music, SoundCloud ou Spotify)".into())
+}
+
 /// Perfil público do SoundCloud: curtidas e playlists, sem login.
 pub fn soundcloud_profile(profile: &str) -> Result<Profile, String> {
     soundcloud::profile(profile)
@@ -525,6 +591,19 @@ mod soundcloud {
             open_url: v["permalink_url"].as_str().unwrap_or(url).to_string(),
             tracks,
         })
+    }
+
+    /// Uma música pelo link (resolve também os encurtados on.soundcloud.com).
+    pub fn track_link(url: &str) -> Result<Track, String> {
+        let clean = url.trim().split(['?', '#']).next().unwrap_or(url);
+        let v = api_get(&format!("https://api-v2.soundcloud.com/resolve?url={}", enc(clean)))
+            .map_err(|e| if e.contains("não achou") { "Não achei essa música no SoundCloud (link quebrado ou privada)".to_string() } else { e })?;
+        match v["kind"].as_str() {
+            Some("track") => track(&v).ok_or_else(|| "O SoundCloud mandou a música incompleta".into()),
+            Some("playlist") => Err("Esse link é de uma playlist (aperte Enter de novo pra importar)".into()),
+            Some("user") => Err("Esse link é de um perfil: use \"Suas contas\" na aba Playlists".into()),
+            _ => Err("Esse link do SoundCloud não é de uma música".into()),
+        }
     }
 
     /// Perfil pelo link (ou só o nome: "fulano" → soundcloud.com/fulano).
@@ -1401,6 +1480,34 @@ mod tests {
         let v: Value = serde_json::from_str(&t).ok()?;
         v["collection"].as_array()?.iter().find(|p| p["track_count"].as_i64().unwrap_or(0) > 10)
             .and_then(|p| p["permalink_url"].as_str()).map(String::from)
+    }
+
+    #[test]
+    fn id_do_video_em_todo_tipo_de_link() {
+        for u in [
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://music.youtube.com/watch?v=dQw4w9WgXcQ&list=RDAMVMdQw4w9WgXcQ",
+            "https://youtu.be/dQw4w9WgXcQ?si=abc",
+            "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+            "https://m.youtube.com/watch?feature=share&v=dQw4w9WgXcQ",
+        ] {
+            assert_eq!(youtube_video_id(u).as_deref(), Some("dQw4w9WgXcQ"), "{u}");
+        }
+        assert_eq!(youtube_video_id("https://www.youtube.com/playlist?list=PL123"), None);
+        assert_eq!(youtube_video_id("https://soundcloud.com/x/y"), None);
+    }
+
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_tocar_pelo_link() {
+        let yt = track_from_link("https://youtu.be/dQw4w9WgXcQ").unwrap_or_else(|e| panic!("youtube: {e}"));
+        println!("Link YouTube: {} — {} ({})", yt.track.title, yt.track.artist, yt.track.url);
+        assert!(yt.track.title.to_lowercase().contains("never"));
+        let pl = soundcloud_any_playlist().expect("sem playlist pra achar uma música");
+        let first = import_playlist(&pl).expect("playlist").tracks.remove(0);
+        let sc = track_from_link(&first.url).unwrap_or_else(|e| panic!("soundcloud: {e} ({})", first.url));
+        println!("Link SoundCloud: {} — {} ({})", sc.track.title, sc.track.artist, sc.track.url);
+        assert!(track_from_link(&pl).is_err(), "playlist não é música");
     }
 
     #[test]

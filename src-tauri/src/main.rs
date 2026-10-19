@@ -85,6 +85,14 @@ async fn search_page(service: String, query: String, kind: String, cursor: Optio
         .map_err(|e| e.to_string())?
 }
 
+/// Música pelo link (YouTube/SoundCloud) pra tocar na hora.
+#[tauri::command]
+async fn track_from_link(url: String) -> Result<search::LinkedTrack, String> {
+    tauri::async_runtime::spawn_blocking(move || search::track_from_link(&url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Perfil público do SoundCloud: curtidas e playlists (sem login).
 #[tauri::command]
 async fn soundcloud_profile(profile: String) -> Result<search::Profile, String> {
@@ -548,6 +556,7 @@ fn main() {
             search_page,
             import_playlist,
             soundcloud_profile,
+            track_from_link,
             yt_login_start,
             yt_login_poll,
             yt_status,

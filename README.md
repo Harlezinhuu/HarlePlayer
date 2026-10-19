@@ -53,6 +53,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 <img src="docs/freestyle.jpg" alt="Freestyle: palavra pra rimar no centro, dicas embaixo e as batidas do compasso" />
 
 ### 🔎 Buscar
+- **Cole o link e toca**: link de música do YouTube, YouTube Music (até `youtu.be` e Shorts) ou SoundCloud na busca, ou `Ctrl+V` em qualquer lugar do app, e ela começa a tocar. Link do Spotify abre no app do Spotify (conta pro Wrapped).
 - **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…).
 - **Abas Tudo · Músicas · Artistas**: os principais resultados e a lista completa, que carrega mais conforme você rola. Clicou numa música, ela toca e o resto da lista vira a fila.
 - Pros outros serviços, ou se a busca do site falhar, os resultados vêm do Deezer.
@@ -98,6 +99,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 |---|---|
 | `Espaço` | Tocar / pausar |
 | `/` ou `Ctrl+K` | Pesquisar |
+| `Ctrl+V` com um link | Tocar a música (ou importar a playlist) |
 | `←` `→` | Girar o carrossel |
 | `Ctrl+Alt+Espaço` / `→` / `←` / `↑` / `↓` / `M` / `L` | Atalhos globais: tocar/pausar, próxima, anterior, volume, mini player, letra flutuante |
 | `F11` (ou duplo clique no topo) | Tela cheia: depois de 3 s parado, sobra só relógio, capa e letra |

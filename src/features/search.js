@@ -191,6 +191,10 @@ export function initSearch(app) {
   const input = $("#searchInput");
   input.addEventListener("input", () => {
     clearTimeout(app.searchTimer);
+    if (app.isSongLink(input.value)) {
+      $("#resNote").textContent = "";
+      return toast("Link de música: aperte Enter pra tocar", 2500);
+    }
     if (isPlaylistLink(input.value)) {
       $("#resNote").textContent = "";
       return toast("Link de playlist: aperte Enter pra importar", 2500);
@@ -202,6 +206,12 @@ export function initSearch(app) {
       clearTimeout(app.searchTimer);
       const q = input.value.trim();
       if (!q) return;
+      if (app.isSongLink(q)) {
+        input.value = "";
+        closeSearch();
+        input.blur();
+        return app.playLink(q);
+      }
       if (isPlaylistLink(q)) {
         input.value = "";
         closeSearch();
@@ -221,7 +231,7 @@ export function initSearch(app) {
   function renderService() {
     const svc = SERVICES[settings.service];
     $("#btnService").innerHTML = `<span class="service-dot" style="background:${svc.color}"></span>${esc(svc.name)}`;
-    input.placeholder = `Pesquisar no ${svc.name}…`;
+    input.placeholder = `Pesquisar no ${svc.name}… ou colar um link`;
     $("#segService").innerHTML = Object.entries(SERVICES)
       .map(([id, s]) => `<button data-v="${id}" class="${id === settings.service ? "sel" : ""}">${esc(s.name)}</button>`)
       .join("");

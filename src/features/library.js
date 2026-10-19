@@ -357,7 +357,40 @@ export function initLibrary(app) {
 
   // ---------- importar playlist por link ----------
   const PLAYLIST_LINK = /(open\.spotify\.com\/(intl-[a-z-]+\/)?(playlist|album)\/|^spotify:(playlist|album):|soundcloud\.com\/[^/\s]+\/sets\/|[?&]list=)/i;
-  const isPlaylistLink = (s) => PLAYLIST_LINK.test(s.trim());
+  // link de UMA música (watch?v=…&list=… também: quem cola quer a música, não o mix)
+  const SONG_LINK = /(youtube\.com\/(watch\?|shorts\/|live\/|embed\/)|youtu\.be\/|on\.soundcloud\.com\/|soundcloud\.com\/(?!discover|search|you\/|stream)[^/\s?#]+\/(?!sets\/|likes|tracks$|albums$|reposts$|popular-tracks$|followers|following)[^/\s?#]+|open\.spotify\.com\/(intl-[a-z-]+\/)?track\/|^spotify:track:)/i;
+  const isSongLink = (s) => SONG_LINK.test(s.trim());
+  const isPlaylistLink = (s) => PLAYLIST_LINK.test(s.trim()) && !isSongLink(s);
+
+  /** Cola o link e toca: SoundCloud/YouTube aqui dentro; Spotify no app do Spotify (Wrapped). */
+  async function playLink(url) {
+    url = url.trim();
+    const sp = /open\.spotify\.com\/(?:intl-[a-z-]+\/)?track\/([A-Za-z0-9]+)|^spotify:track:([A-Za-z0-9]+)/i.exec(url);
+    if (sp) return openSpotify(`spotify:track:${sp[1] || sp[2]}`, "a música");
+    if (!player) return toast("O player interno não está disponível aqui");
+    toast("Abrindo o link…", 2500);
+    try {
+      const r = await api.invoke("track_from_link", { url });
+      const t = r.track;
+      player.playQueue([toTrack({ ...t, durationMs: t.durationMs || 0 }, r.source === "soundcloud" ? "soundcloud" : "youtube")], 0);
+      toast(`Tocando: ${t.title}${t.artist ? ` — ${t.artist}` : ""}`, 3000);
+    } catch (e) {
+      toast(String(e?.message || e), 5000);
+    }
+  }
+  // Ctrl+V em qualquer lugar do app (fora de campo de texto) com um link → toca/importa
+  if (!IS_WALLPAPER) {
+    document.addEventListener("paste", (e) => {
+      const t = e.target;
+      if (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName)) return;
+      const text = (e.clipboardData?.getData("text") || "").trim();
+      if (!/^(https?:\/\/|spotify:)/i.test(text)) return;
+      e.preventDefault();
+      if (isSongLink(text)) playLink(text);
+      else if (isPlaylistLink(text)) importPlaylistUrl(text);
+      else toast("Esse link não é de música do YouTube, SoundCloud ou Spotify", 3500);
+    });
+  }
 
   /** silent: atualização no fundo (sem trocar de aba nem avisar); synced: mantém atualizada sozinha */
   async function importPlaylistUrl(url, { silent = false, synced = false, open = true } = {}) {
@@ -772,6 +805,8 @@ export function initLibrary(app) {
   return {
     get isPlaylistLink() { return isPlaylistLink; },
     get importPlaylistUrl() { return importPlaylistUrl; },
+    get isSongLink() { return isSongLink; },
+    get playLink() { return playLink; },
     get ICON() { return ICON; },
     get trackFrom() { return trackFrom; },
     get resolveTrack() { return resolveTrack; },

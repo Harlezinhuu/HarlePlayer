@@ -170,6 +170,12 @@ export function createDemoApi() {
             next: page < 3 ? String(page + 1) : null,
           };
         }
+        case "track_from_link": {
+          await new Promise((r) => setTimeout(r, 500));
+          const yt = /youtu/.test(args.url);
+          const t = TRACKS[yt ? 3 : 1];
+          return { source: yt ? "youtube" : "soundcloud", track: { title: t.title, artist: t.artist, cover: t.thumb, url: args.url, durationMs: t.durationMs } };
+        }
         case "soundcloud_profile": {
           await new Promise((r) => setTimeout(r, 700));
           if (!/\w/.test(args.profile)) throw "Não achei esse perfil no SoundCloud";
