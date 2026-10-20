@@ -970,3 +970,7 @@ body.mode-wallpaper #partyPanel { display: none !important; }
 .yt-code .acc-row { flex-wrap: wrap; }
 .yt-code .acc-row .q-tool { flex: 1; }
 #segDuck.off, .row-sub.off { opacity: .4; pointer-events: none; }
+
+/* ===== Encaixe do wallpaper: inteiro com as sobras desfocadas ===== */
+#bgFill { position: absolute; inset: -6%; width: 112%; height: 112%; filter: blur(34px) brightness(.72) saturate(1.15); }
+#bg.fit-contain #bgImage, #bg.fit-contain #bgVideo { object-fit: contain; }

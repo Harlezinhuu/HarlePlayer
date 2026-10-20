@@ -14,6 +14,7 @@
   <div id="bg" aria-hidden="true">
     <div class="bg-art" id="bgArtA"></div>
     <div class="bg-art" id="bgArtB"></div>
+    <canvas id="bgFill" width="96" height="54" hidden></canvas>
     <img id="bgImage" alt="" hidden />
     <video id="bgVideo" autoplay muted loop playsinline hidden></video>
     <canvas id="bgCanvas" hidden></canvas>
@@ -258,6 +259,12 @@
       <div id="lib" class="lib"></div>
       <input id="fileInput" type="file" accept="video/mp4,video/webm,image/*" hidden />
       <p class="hint">Vídeo (mp4/webm), GIF ou imagem. Fica salvo no app.</p>
+      <span class="row-sub">Encaixe na tela</span>
+      <div class="seg" id="segFit">
+        <button data-v="auto" title="Vertical fica inteiro com as laterais desfocadas; o resto preenche a tela">Automático</button>
+        <button data-v="cover" title="Ocupa a tela toda (pode cortar as bordas)">Preencher</button>
+        <button data-v="contain" title="Mostra inteiro, com as sobras desfocadas">Inteiro</button>
+      </div>
       <div class="row toggle-row">
         <span>Wallpaper animado <small class="muted">(atrás dos ícones da área de trabalho)</small></span>
         <button class="switch" id="swWallpaper" role="switch"></button>

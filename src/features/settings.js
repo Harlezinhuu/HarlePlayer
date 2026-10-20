@@ -18,6 +18,7 @@ export function initSettings(app) {
     document.querySelectorAll("#segLyrics button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.lyricsMode));
     for (const c of ["solid", "thin", "outline"]) document.body.classList.toggle(`clock-${c}`, settings.clockStyle === c);
     document.querySelectorAll("#segClock button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.clockStyle));
+    document.querySelectorAll("#segFit button").forEach((b) => b.classList.toggle("sel", b.dataset.v === (settings.wallFit || "auto")));
     $("#swDiscord").classList.toggle("on", settings.discord);
     $("#swVisualizer").classList.toggle("on", settings.visualizer);
     $("#swWallViz").classList.toggle("on", settings.visualizer && settings.wallpaperVisualizer);
@@ -204,6 +205,14 @@ export function initSettings(app) {
     settings.clockStyle = b.dataset.v;
     saveSettings();
     renderSettings();
+  });
+  $("#segFit").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]");
+    if (!b) return;
+    settings.wallFit = b.dataset.v;
+    saveSettings(); // a janela do wallpaper recarrega sozinha com a nova opção
+    renderSettings();
+    app.fitter.update();
   });
   $("#segService").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-v]");

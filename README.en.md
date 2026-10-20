@@ -79,7 +79,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
 - **3D cover carousel** with what you played recently. Spin it with the mouse wheel or the ← → keys.
 - **Dynamic background** made from the cover. The app's accent color follows the cover too.
 - **Animated wallpaper behind your desktop icons**, Wallpaper Engine style, with the clock, lyrics and song right on the desktop.
-- **Wallpaper library**: video (mp4/webm), GIF or image, plus **Aurora**, a built-in animated background that changes color with the cover.
+- **Wallpaper library**: video (mp4/webm), GIF or image, plus **Aurora**, a built-in animated background that changes color with the cover. Vertical phone videos fit whole, with the sides filled by the same video blurred, no converting needed.
 
 ### 🔌 Integrations
 - **Global hotkeys** that work even in games: `Ctrl+Alt+Space` (play/pause), `Ctrl+Alt+→/←` (next/previous), `Ctrl+Alt+↑/↓` (volume) and `Ctrl+Alt+M` (mini player).

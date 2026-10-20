@@ -96,6 +96,7 @@ const DEFAULTS = {
   clockStyle: "solid", // solid | thin | outline
   wallpaperMode: false, // wallpaper animado atrás dos ícones
   wallpaperId: "builtin:aurora",
+  wallFit: "auto", // auto | cover | contain (inteiro, com as laterais desfocadas)
   discord: true, // Rich Presence
   discordSpotify: false, // o Spotify já mostra sozinho no Discord
   browserService: "soundcloud", // quando não dá pra saber qual site do navegador está tocando
@@ -489,11 +490,52 @@ function stopAurora() {
   auroraCanvas.hidden = true;
 }
 
+// ---------- encaixe: vídeo/imagem que não tem o formato da tela ----------
+// "Inteiro": mostra tudo (object-fit: contain) e preenche as sobras com uma
+// miniatura do próprio fundo, bem desfocada (atualizada ~10×/s no vídeo).
+const fitter = (() => {
+  const canvas = $("#bgFill");
+  const ctx = canvas.getContext("2d");
+  let timer = 0, el = null;
+  function shouldContain(w, h) {
+    if (settings.wallFit === "contain") return true;
+    if (settings.wallFit === "cover" || !w || !h) return false;
+    // automático: só quando o formato é bem diferente da tela (ex.: vídeo de celular)
+    const ratio = w / h / (innerWidth / innerHeight);
+    return ratio < 0.75 || ratio > 1.6;
+  }
+  function draw() {
+    try { if (el) ctx.drawImage(el, 0, 0, canvas.width, canvas.height); } catch {}
+  }
+  function update() {
+    clearInterval(timer);
+    const w = el?.videoWidth || el?.naturalWidth, h = el?.videoHeight || el?.naturalHeight;
+    const on = !!el && !el.hidden && shouldContain(w, h);
+    $("#bg").classList.toggle("fit-contain", on);
+    canvas.hidden = !on;
+    if (!on) return;
+    draw();
+    if (el.tagName === "VIDEO") timer = setInterval(() => !el.paused && draw(), 100);
+  }
+  window.addEventListener("resize", () => el && update());
+  return {
+    attach(node) {
+      el = node;
+      if (!node) return update();
+      const ev = node.tagName === "VIDEO" ? "loadeddata" : "load";
+      if (node.tagName === "VIDEO" ? node.readyState >= 2 : node.complete && node.naturalWidth) update();
+      else node.addEventListener(ev, update, { once: true });
+    },
+    update,
+  };
+})();
+
 // ---------- aplica o fundo ----------
 let bgObjectUrl = null;
 async function applyBackground() {
   const img = $("#bgImage"), vid = $("#bgVideo");
   img.hidden = vid.hidden = true;
+  fitter.attach(null);
   vid.pause();
   stopAurora();
 
@@ -529,9 +571,11 @@ async function applyBackground() {
     vid.src = bgObjectUrl;
     vid.hidden = false;
     if (!paused) vid.play().catch(() => {});
+    fitter.attach(vid);
   } else {
     img.src = bgObjectUrl;
     img.hidden = false;
+    fitter.attach(img);
   }
 }
 
@@ -699,6 +743,7 @@ const app = {
   get discordStatusTimer() { return discordStatusTimer; }, set discordStatusTimer(v) { discordStatusTimer = v; },
   get dropNow() { return dropNow; },
   get enc() { return enc; },
+  get fitter() { return fitter; },
   get history() { return history; }, set history(v) { history = v; },
   get httpJson() { return httpJson; },
   get idb() { return idb; },
