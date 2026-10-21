@@ -974,3 +974,13 @@ body.mode-wallpaper #partyPanel { display: none !important; }
 /* ===== Encaixe do wallpaper: inteiro com as sobras desfocadas ===== */
 #bgFill { position: absolute; inset: -6%; width: 112%; height: 112%; filter: blur(34px) brightness(.72) saturate(1.15); }
 #bg.fit-contain #bgImage, #bg.fit-contain #bgVideo { object-fit: contain; }
+
+/* ===== pedido pra entrar pelo Discord ===== */
+#discordAsk { position: fixed; z-index: 40; top: 46px; right: 18px; padding: 8px; border-radius: 16px; background: rgba(16,18,30,.92); display: flex; flex-direction: column; gap: 6px; animation: rise .35s var(--ease); }
+#discordAsk[hidden] { display: none; }
+#discordAsk .ask { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 8px; border-radius: 12px; background: rgba(88,101,242,.16); }
+#discordAsk img, #discordAsk .av { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; background: #5865f2; font-weight: 800; }
+#discordAsk b { display: block; font-size: 13px; }
+#discordAsk small { font-size: 11.5px; color: var(--muted); }
+#discordAsk .btn { height: 30px; }
+#discordAsk .btn.primary { margin-left: 10px; background: #5865f2; color: #fff; }

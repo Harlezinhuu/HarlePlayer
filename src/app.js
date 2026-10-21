@@ -99,6 +99,7 @@ const DEFAULTS = {
   wallFit: "auto", // auto | cover | contain (inteiro, com as laterais desfocadas)
   discord: true, // Rich Presence
   discordSpotify: false, // o Spotify já mostra sozinho no Discord
+  discordJoin: true, // com sala aberta: "Pedir para participar" no perfil do Discord
   browserService: "soundcloud", // quando não dá pra saber qual site do navegador está tocando
 };
 const settings = { ...DEFAULTS, ...store.get("hp.settings", {}) };
@@ -779,6 +780,7 @@ const app = {
   get saveHistory() { return saveHistory; },
   get saveRecording() { return karaokeUi.saveRecording; },
   get saveSettings() { return saveSettings; },
+  get scheduleDiscord() { return scheduleDiscord; },
   get searchTimer() { return searchTimer; }, set searchTimer(v) { searchTimer = v; },
   get serviceName() { return serviceName; },
   get setAccent() { return setAccent; },
@@ -1644,9 +1646,18 @@ function scheduleDiscord() {
   discordTimer = setTimeout(updateDiscord, 1200);
 }
 
+/** Sala do "ouvir junto" aberta → festa no Discord (o botão "Pedir para participar"). */
+function discordParty() {
+  const room = partyUi?.party?.room;
+  if (!room || settings.discordJoin === false) return null;
+  return { id: room.topic, size: Math.max(1, partyUi.party.members.size), max: 20, secret: room.code };
+}
+
 async function updateDiscord() {
   const svc = playingService();
-  const show = settings.discord && keyOf(media) && media.playing && !(svc === "spotify" && !settings.discordSpotify);
+  const party = discordParty();
+  // na sala, aparece até tocando no Spotify (é por aqui que os amigos pedem pra entrar)
+  const show = settings.discord && keyOf(media) && media.playing && (party || !(svc === "spotify" && !settings.discordSpotify));
   if (!show) {
     if (discordSig !== "off") {
       discordSig = "off";
@@ -1655,7 +1666,7 @@ async function updateDiscord() {
     return;
   }
   const start = Date.now() - positionNow();
-  const sig = `${keyOf(media)}|${svc}|${Math.round(start / 3000)}`;
+  const sig = `${keyOf(media)}|${svc}|${Math.round(start / 3000)}|${party ? `${party.secret}:${party.size}` : ""}`;
   if (sig === discordSig) return;
   discordSig = sig;
 
@@ -1676,10 +1687,38 @@ async function updateDiscord() {
         startMs: Math.round(start),
         endMs: media.durationMs > 0 ? Math.round(start + media.durationMs) : null,
         url: (media.link?.startsWith("https://") && media.link) || serviceWeb(svc, `${title} ${artist}`.trim()) || null,
+        party,
       },
     })
     .catch(() => {});
 }
+
+const discordChanged = () => {
+  saveSettings();
+  settingsUi.renderSettings();
+  discordSig = "";
+  scheduleDiscord();
+  if (!IS_WALLPAPER) api.invoke("discord_listen", { on: !!(settings.discord && settings.discordJoin !== false) }).catch(() => {});
+  setTimeout(refreshDiscordStatus, 2500);
+};
+$("#swDiscord").addEventListener("click", () => {
+  settings.discord = !settings.discord;
+  discordChanged();
+});
+$("#swDiscordSpotify").addEventListener("click", () => {
+  settings.discordSpotify = !settings.discordSpotify;
+  discordChanged();
+});
+$("#swDiscordJoin").addEventListener("click", () => {
+  settings.discordJoin = settings.discordJoin === false;
+  discordChanged();
+});
+$("#segBrowser").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-v]");
+  if (!b) return;
+  settings.browserService = b.dataset.v;
+  discordChanged();
+});
 
 let discordStatusTimer;
 async function refreshDiscordStatus() {
@@ -1839,6 +1878,7 @@ if (IS_WALLPAPER) {
   api.listen("wallpaper-mode", (on) => setWallpaperMode(!!on, true));
 }
 api.invoke("get_media").then(onMedia).catch(() => {});
+if (!IS_WALLPAPER && settings.discord && settings.discordJoin !== false) api.invoke("discord_listen", { on: true }).catch(() => {});
 if (!IS_WALLPAPER && settings.wallpaperMode) {
   api.invoke("set_wallpaper_mode", { enabled: true }).catch(() => {
     settings.wallpaperMode = false;

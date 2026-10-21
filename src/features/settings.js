@@ -27,6 +27,7 @@ export function initSettings(app) {
     $("#swDropFx").classList.toggle("on", settings.dropFx);
     document.body.classList.toggle("no-visualizer", !app.vizOn());
     $("#swDiscordSpotify").classList.toggle("on", settings.discordSpotify);
+    $("#swDiscordJoin").classList.toggle("on", settings.discordJoin !== false);
     $("#segBrowser").innerHTML = ["soundcloud", "ytmusic", "youtube"]
       .map((id) => `<button data-v="${id}" class="${id === settings.browserService ? "sel" : ""}">${esc(SERVICES[id].name)}</button>`)
       .join("");

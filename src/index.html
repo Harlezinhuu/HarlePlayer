@@ -373,6 +373,10 @@
         <span>Mostrar também o Spotify <small class="muted">(ele já aparece sozinho)</small></span>
         <button class="switch" id="swDiscordSpotify" role="switch"></button>
       </div>
+      <div class="row toggle-row">
+        <span>Amigos podem pedir pra ouvir junto <small class="muted">(com uma sala aberta, aparece "Pedir para participar" no seu perfil do Discord, igual em jogo)</small></span>
+        <button class="switch" id="swDiscordJoin" role="switch"></button>
+      </div>
       <span class="row-sub">Música tocando no navegador conta como</span>
       <div class="seg" id="segBrowser"></div>
       <p class="hint" id="discordStatus"></p>
@@ -400,6 +404,9 @@
   </section>
 
   <!-- ===== Ouvir junto ===== -->
+  <!-- pedido pra entrar na sala pelo Discord -->
+  <div id="discordAsk" class="glass" hidden></div>
+
   <section id="partyPanel" class="glass panel" hidden>
     <div class="panel-head">
       <h2>Ouvir junto</h2>
@@ -419,6 +426,7 @@
     </div>
     <div id="partyIn" hidden>
       <div class="party-code"><span id="partyDot" class="dot on"></span><b id="partyCode"></b><button id="partyCopy" class="btn">Copiar</button></div>
+      <p class="hint" id="partyDiscordHint">Pelo Discord também: os amigos clicam em <b>Pedir para participar</b> no seu perfil, ou você convida pelo <b>+</b> do chat.</p>
       <p class="hint" id="partyRole"></p>
       <label class="row-label">Na sala</label>
       <ul id="partyMembers" class="party-members"></ul>

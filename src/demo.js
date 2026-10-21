@@ -111,6 +111,7 @@ export function createDemoApi() {
 
   let demoVol = 0.6;
   window.__partyDeliver = (b) => (listeners["party-msg"] || []).forEach((cb) => cb(b));
+  window.__demoEmit = (ev, data) => (listeners[ev] || []).forEach((cb) => cb(data)); // simula eventos do Rust (ex.: Discord)
   return {
     demo: true,
     sampleTracks: TRACKS,
@@ -239,7 +240,14 @@ export function createDemoApi() {
           return toneWav(6);
         }
         case "discord_set":
+          window.__lastPresence = args.presence;
           console.log("[demo] discord", JSON.stringify(args.presence));
+          return;
+        case "discord_listen":
+          window.__discordListen = args.on;
+          return;
+        case "discord_respond":
+          window.__discordRespond = args;
           return;
         case "open_url":
           console.log("[demo] abrir", args.url);

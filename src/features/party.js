@@ -55,6 +55,41 @@ export function initParty(app) {
     if (!quiet) toast("Você saiu da sala");
   }
 
+  // ---------- Discord: pedidos pra entrar e convites aceitos ----------
+  api.listen("discord-join", async (secret) => {
+    const code = Party.normalizeCode(secret);
+    if (!code) return toast("O convite do Discord veio com um código inválido", 4000);
+    if (party.room?.code === code) return;
+    toast("Entrando na sala do seu amigo pelo Discord 🎧", 3500);
+    await partyEnter(code, "guest");
+    $("#partyPanel").hidden = false;
+  });
+  const asks = new Map(); // id → timer (o Discord desiste do pedido em ~30 s)
+  function renderAsks() {
+    const box = $("#discordAsk");
+    box.hidden = !asks.size;
+    box.innerHTML = [...asks.values()]
+      .map(({ u }) => `<div class="ask" data-uid="${esc(u.id)}">${u.avatar ? `<img src="${esc(u.avatar)}" alt="">` : `<span class="av">${esc((u.name || "?")[0].toUpperCase())}</span>`}<div><b>${esc(u.name)}</b><small>quer ouvir junto com você</small></div><button class="btn primary" data-ok="1">Aceitar</button><button class="btn" data-ok="0">Recusar</button></div>`)
+      .join("");
+  }
+  api.listen("discord-join-request", (u) => {
+    if (!u?.id || !party.room) return;
+    clearTimeout(asks.get(u.id)?.timer);
+    asks.set(u.id, { u, timer: setTimeout(() => { asks.delete(u.id); renderAsks(); }, 30000) });
+    renderAsks();
+  });
+  $("#discordAsk").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ok]");
+    const id = b?.closest("[data-uid]")?.dataset.uid;
+    if (!id) return;
+    const ok = b.dataset.ok === "1";
+    api.invoke("discord_respond", { userId: id, accept: ok }).catch(() => {});
+    toast(ok ? `Convite enviado pra ${asks.get(id)?.u.name || "seu amigo"} 🎧` : "Pedido recusado", 2500);
+    clearTimeout(asks.get(id)?.timer);
+    asks.delete(id);
+    renderAsks();
+  });
+
   api.listen("party-status", (st) => {
     party.status = st;
     renderParty();
@@ -197,6 +232,8 @@ export function initParty(app) {
   // ---------- painel ----------
   function renderParty() {
     const inRoom = !!party.room;
+    app.scheduleDiscord(); // sala abriu/fechou ou mudou de tamanho → atualiza a festa no Discord
+    $("#partyDiscordHint").hidden = !settings.discord || settings.discordJoin === false;
     $("#btnParty").classList.toggle("on", inRoom);
     $("#btnParty").dataset.count = inRoom ? party.members.size : "";
     $("#partyOut").hidden = inRoom;

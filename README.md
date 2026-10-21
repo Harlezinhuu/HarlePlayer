@@ -84,6 +84,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Abaixa a música quando alguém fala no Discord** (opcional, em Extras): o app lê o volume do Discord no mixer do Windows e abaixa a música (até a do Spotify) só enquanto o pessoal fala na call, voltando quando param.
 - **Letra flutuante** (`Ctrl+Alt+L`): a letra aparece como legenda na parte de baixo da tela, por cima de qualquer coisa, sem atrapalhar o clique.
 - **Aviso de música nova**: um cartão aparece no canto da tela quando a música troca (e no volume pelo atalho), sem roubar o foco do jogo.
+- **Pedir pra ouvir junto pelo Discord**, igual em jogo: com uma sala aberta, seu perfil mostra a festa ("1 de 20") e o botão **Pedir para participar**. Você aceita no próprio app (ou no Discord) e o Harle Player do seu amigo entra na sala sozinho. Dá pra convidar também pelo **+** do chat.
 - **Discord Rich Presence**: "Ouvindo SoundCloud" (ou YouTube Music, YouTube…) no seu perfil, com capa, artista, barra de tempo e botão "Ouvir no …". Detecta sozinho onde a música está tocando, até no navegador.
 - **Controle pelo celular**: liga nas configurações, aponta a câmera pro QR code e o celular vira um controle (tocar, pular, volume, letra rolando, fila e busca), sem instalar nada. Funciona em Android e iPhone, na mesma rede Wi-Fi. O acesso é protegido por um código que só o QR tem.
 - **Se atualiza sozinho**: avisa quando sai versão nova nas Releases, baixa, instala e abre de novo com um clique.

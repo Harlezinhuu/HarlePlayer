@@ -86,6 +86,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
 - **Lowers the music when someone talks on Discord** (optional, under Extras): the app reads Discord's level in the Windows mixer and lowers the music (even Spotify's) while people talk on the call, bringing it back when they stop.
 - **Floating lyrics** (`Ctrl+Alt+L`): lyrics show as subtitles at the bottom of the screen, on top of everything, without blocking clicks.
 - **New song toast**: a card shows in the corner when the song changes (and on volume changes via hotkey), without stealing focus from your game.
+- **Ask to listen along through Discord**, just like games: with a room open, your profile shows the party ("1 of 20") and the **Ask to Join** button. You accept in the app (or in Discord) and your friend's Harle Player joins the room by itself. You can also invite through the chat **+** button.
 - **Discord Rich Presence**: "Listening to SoundCloud" (or YouTube Music, YouTube…) on your profile, with cover, artist, time bar and a "Listen on …" button. It detects where music is playing by itself, even in the browser.
 - **Phone remote**: turn it on in settings, point your camera at the QR code and your phone becomes a remote (play, skip, volume, scrolling lyrics, queue and search), with nothing to install. Works on Android and iPhone on the same Wi-Fi. Access is protected by a token only the QR code has.
 - **Updates itself**: tells you when a new version is out on Releases, then downloads, installs and relaunches with one click.

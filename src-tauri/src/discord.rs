@@ -35,6 +35,20 @@ pub struct Presence {
     pub end_ms: Option<i64>,
     /// link pro botão "Ouvir no …"
     pub url: Option<String>,
+    /// sala do "ouvir junto" aberta: vira festa no Discord ("Pedir para participar")
+    #[serde(default)]
+    pub party: Option<Party>,
+}
+
+/// Festa no Discord (igual jogo): tamanho da sala e o código pra entrar.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Party {
+    pub id: String,
+    pub size: u32,
+    pub max: u32,
+    /// código de convite da sala: o Discord só entrega pra quem for aceito/convidado
+    pub secret: String,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -133,7 +147,9 @@ pub fn start() {
                     sent = None;
                 }
                 Some(p) => {
-                    let Some(id) = app_id_for(&p.service) else {
+                    // festa usa sempre o app padrão (é ele que o "ouvinte" escuta)
+                    let id = if p.party.is_some() { app_ids().get("default").cloned().or_else(|| app_id_for(&p.service)) } else { app_id_for(&p.service) };
+                    let Some(id) = id else {
                         set_status(false, "Nenhum ID de app do Discord configurado");
                         sent = desired.clone();
                         continue;
@@ -192,8 +208,38 @@ fn send(m: Msg) {
 
 // ---------- conexão ----------
 
-trait Pipe: Read + Write + Send {}
-impl<T: Read + Write + Send> Pipe for T {}
+trait Pipe: Read + Write + Send {
+    /// Bytes esperando pra ser lidos (sem bloquear).
+    fn available(&mut self) -> io::Result<usize>;
+}
+
+#[cfg(windows)]
+impl Pipe for std::fs::File {
+    fn available(&mut self) -> io::Result<usize> {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::System::Pipes::PeekNamedPipe;
+        let mut avail: u32 = 0;
+        let ok = unsafe {
+            PeekNamedPipe(self.as_raw_handle() as _, std::ptr::null_mut(), 0, std::ptr::null_mut(), &mut avail, std::ptr::null_mut())
+        };
+        if ok == 0 { Err(io::Error::last_os_error()) } else { Ok(avail as usize) }
+    }
+}
+
+#[cfg(unix)]
+impl Pipe for std::os::unix::net::UnixStream {
+    fn available(&mut self) -> io::Result<usize> {
+        self.set_nonblocking(true)?;
+        let mut b = [0u8; 1];
+        let r = self.peek(&mut b);
+        self.set_nonblocking(false)?;
+        match r {
+            Ok(n) => Ok(n),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(0),
+            Err(e) => Err(e),
+        }
+    }
+}
 
 struct Conn {
     client_id: String,
@@ -250,17 +296,28 @@ impl Conn {
     }
 
     fn command(&mut self, activity: Value) -> Result<(), String> {
+        self.send_cmd("SET_ACTIVITY", json!({ "pid": std::process::id(), "activity": activity }), None)
+    }
+
+    /// Manda um comando e espera a resposta dele (pelo nonce).
+    fn send_cmd(&mut self, cmd: &str, args: Value, evt: Option<&str>) -> Result<(), String> {
         self.nonce += 1;
-        let payload = json!({
-            "cmd": "SET_ACTIVITY",
-            "args": { "pid": std::process::id(), "activity": activity },
-            "nonce": format!("harle-{}", self.nonce),
-        });
+        let nonce = format!("harle-{}", self.nonce);
+        let mut payload = json!({ "cmd": cmd, "args": args, "nonce": nonce });
+        if let Some(e) = evt {
+            payload["evt"] = json!(e);
+        }
         self.write(1, &payload).map_err(|e| e.to_string())?;
-        let (_, reply) = self.read().map_err(|e| e.to_string())?;
-        if reply["evt"] == "ERROR" {
-            let msg = reply["data"]["message"].as_str().unwrap_or("erro desconhecido");
-            return Err(format!("Discord: {msg}"));
+        for _ in 0..8 {
+            let (_, reply) = self.read().map_err(|e| e.to_string())?;
+            if reply["nonce"].as_str() != Some(nonce.as_str()) {
+                continue; // evento chegando no meio: ignora aqui
+            }
+            if reply["evt"] == "ERROR" {
+                let msg = reply["data"]["message"].as_str().unwrap_or("erro desconhecido");
+                return Err(format!("Discord: {msg}"));
+            }
+            return Ok(());
         }
         Ok(())
     }
@@ -317,10 +374,159 @@ fn build_activity(p: &Presence) -> Value {
     }
     activity["timestamps"] = Value::Object(ts);
 
-    if let Some(url) = p.url.as_deref().filter(|u| u.starts_with("https://") && u.len() <= 512) {
+    if let Some(party) = &p.party {
+        // O Discord não aceita botão de link junto com festa: aqui quem aparece é o
+        // botão dele mesmo, "Pedir para participar" (e o convite pelo + do chat).
+        let size = party.size.max(1);
+        activity["party"] = json!({ "id": fit(&party.id, 128), "size": [size, party.max.max(size)] });
+        activity["secrets"] = json!({ "join": fit(&party.secret, 128) });
+        activity["instance"] = json!(true);
+    } else if let Some(url) = p.url.as_deref().filter(|u| u.starts_with("https://") && u.len() <= 512) {
         activity["buttons"] = json!([{ "label": fit(&format!("Ouvir no {}", p.service_name), 32), "url": url }]);
     }
     activity
+}
+
+// ---------- "ouvinte": pedidos pra entrar e convites aceitos ----------
+// Conexão separada, com o app padrão, sempre aberta enquanto o Discord estiver
+// ligado no app. Recebe:
+//   ACTIVITY_JOIN_REQUEST  alguém clicou "Pedir para participar" no seu perfil
+//   ACTIVITY_JOIN          você foi aceito/convidado → vem o código da sala
+// Por estar sempre conectado, o Discord entrega o convite aqui em vez de abrir
+// outra cópia do app.
+
+/// Avisos pro front: ("discord-join", código) e ("discord-join-request", usuário).
+pub type Emit = Box<dyn Fn(&str, Value) + Send + Sync>;
+static LISTEN_TX: OnceLock<Mutex<Sender<ListenMsg>>> = OnceLock::new();
+
+enum ListenMsg {
+    Enable(bool),
+    Respond(String, bool),
+}
+
+pub fn listen(on: bool) {
+    if let Some(tx) = LISTEN_TX.get() {
+        let _ = tx.lock().unwrap().send(ListenMsg::Enable(on));
+    }
+}
+
+/// Aceitar/recusar quem pediu pra entrar.
+pub fn respond(user_id: String, accept: bool) {
+    if let Some(tx) = LISTEN_TX.get() {
+        let _ = tx.lock().unwrap().send(ListenMsg::Respond(user_id, accept));
+    }
+}
+
+pub fn start_listener(emit: Emit) {
+    let Some(id) = app_ids().get("default").cloned() else { return };
+    let (tx, rx) = mpsc::channel::<ListenMsg>();
+    let _ = LISTEN_TX.set(Mutex::new(tx));
+    std::thread::spawn(move || {
+        register_launcher(&id);
+        let mut enabled = false;
+        let mut conn: Option<Conn> = None;
+        let mut retry_at = std::time::Instant::now();
+        loop {
+            while let Ok(m) = rx.try_recv() {
+                match m {
+                    ListenMsg::Enable(on) => {
+                        enabled = on;
+                        if !on {
+                            if let Some(mut c) = conn.take() {
+                                c.close();
+                            }
+                        }
+                    }
+                    ListenMsg::Respond(user, accept) => {
+                        if let Some(c) = conn.as_mut() {
+                            let cmd = if accept { "SEND_ACTIVITY_JOIN_INVITE" } else { "CLOSE_ACTIVITY_REQUEST" };
+                            if c.send_cmd(cmd, json!({ "user_id": user }), None).is_err() {
+                                conn = None;
+                            }
+                        }
+                    }
+                }
+            }
+            if !enabled {
+                std::thread::sleep(Duration::from_millis(400));
+                continue;
+            }
+            if conn.is_none() && std::time::Instant::now() >= retry_at {
+                match Conn::connect(&id) {
+                    Ok(mut c) => {
+                        let ok = ["ACTIVITY_JOIN", "ACTIVITY_JOIN_REQUEST"]
+                            .iter()
+                            .all(|evt| c.send_cmd("SUBSCRIBE", json!({}), Some(evt)).is_ok());
+                        if ok {
+                            conn = Some(c);
+                        } else {
+                            retry_at = std::time::Instant::now() + Duration::from_secs(20);
+                        }
+                    }
+                    Err(_) => retry_at = std::time::Instant::now() + Duration::from_secs(20),
+                }
+            }
+            // lê o que chegou sem travar (o pipe do Windows não deixa ler e
+            // escrever ao mesmo tempo, então só lê quando já tem dado esperando)
+            let mut lost = false;
+            if let Some(c) = conn.as_mut() {
+                match c.pipe.available() {
+                    Ok(0) => {}
+                    Ok(_) => match c.read() {
+                        Ok((_, v)) => handle_event(&v, &emit),
+                        Err(_) => lost = true,
+                    },
+                    Err(_) => lost = true,
+                }
+            }
+            if lost {
+                conn = None;
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+    });
+}
+
+fn handle_event(v: &Value, emit: &Emit) {
+    if let Some((name, data)) = event_payload(v) {
+        emit(name, data);
+    }
+}
+
+/// Evento do Discord → (nome do aviso pro front, dados). Exposto pros testes.
+fn event_payload(v: &Value) -> Option<(&'static str, Value)> {
+    match v["evt"].as_str()? {
+        "ACTIVITY_JOIN" => Some(("discord-join", json!(v["data"]["secret"].as_str()?))),
+        "ACTIVITY_JOIN_REQUEST" => {
+            let u = &v["data"]["user"];
+            let id = u["id"].as_str()?;
+            let name = u["username"].as_str()?;
+            let avatar = u["avatar"].as_str().map(|a| format!("https://cdn.discordapp.com/avatars/{id}/{a}.png?size=64"));
+            let display = u["global_name"].as_str().filter(|g| !g.is_empty()).unwrap_or(name);
+            Some(("discord-join-request", json!({ "id": id, "name": display, "avatar": avatar })))
+        }
+        _ => None,
+    }
+}
+
+/// Avisa o Windows como abrir o Harle Player pelo Discord ("discord-<id>://"),
+/// pra quem aceitar o convite sem o app aberto (igual a biblioteca discord-rpc).
+fn register_launcher(app_id: &str) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let Ok(exe) = std::env::current_exe() else { return };
+        let key = format!(r"HKCU\Software\Classes\discord-{app_id}");
+        let run = |args: &[&str]| {
+            let _ = std::process::Command::new("reg").args(args).creation_flags(0x0800_0000).status();
+        };
+        run(&["add", &key, "/ve", "/d", &format!("URL:Run game {app_id} protocol"), "/f"]);
+        run(&["add", &key, "/v", "URL Protocol", "/d", "", "/f"]);
+        run(&["add", &format!(r"{key}\DefaultIcon"), "/ve", "/d", &exe.display().to_string(), "/f"]);
+        run(&["add", &format!(r"{key}\shell\open\command"), "/ve", "/d", &format!("\"{}\"", exe.display()), "/f"]);
+    }
+    #[cfg(not(windows))]
+    let _ = app_id;
 }
 
 fn open_pipe() -> Option<Box<dyn Pipe>> {
@@ -372,7 +578,30 @@ mod tests {
             start_ms: 1_700_000_000_000,
             end_ms: Some(1_700_000_239_000),
             url: Some("https://soundcloud.com/search?q=lucid".into()),
+            party: None,
         }
+    }
+
+    #[test]
+    fn festa_troca_o_botao_de_link_pelo_pedir_pra_participar() {
+        let mut p = exemplo();
+        p.party = Some(Party { id: "harle-abc".into(), size: 2, max: 20, secret: "K7QM-2X9P-RT4W-H8NA".into() });
+        let a = build_activity(&p);
+        assert_eq!(a["party"]["size"], json!([2, 20]));
+        assert_eq!(a["secrets"]["join"], "K7QM-2X9P-RT4W-H8NA");
+        assert!(a.get("buttons").is_none(), "o Discord recusa botão de link junto com festa");
+    }
+
+    #[test]
+    fn eventos_de_entrar_viram_avisos_pro_app() {
+        let join = json!({ "evt": "ACTIVITY_JOIN", "data": { "secret": "ABCD-EFGH" } });
+        assert_eq!(event_payload(&join), Some(("discord-join", json!("ABCD-EFGH"))));
+        let req = json!({ "evt": "ACTIVITY_JOIN_REQUEST", "data": { "user": { "id": "42", "username": "fulano", "global_name": "Fulano", "avatar": "abc" } } });
+        let (name, data) = event_payload(&req).unwrap();
+        assert_eq!(name, "discord-join-request");
+        assert_eq!(data["name"], "Fulano");
+        assert_eq!(data["avatar"], "https://cdn.discordapp.com/avatars/42/abc.png?size=64");
+        assert_eq!(event_payload(&json!({ "evt": "READY" })), None);
     }
 
     #[test]

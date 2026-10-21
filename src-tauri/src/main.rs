@@ -395,6 +395,18 @@ fn discord_clear() {
     discord::clear();
 }
 
+/// Liga/desliga o "ouvinte" do Discord (pedidos pra entrar na sala).
+#[tauri::command]
+fn discord_listen(on: bool) {
+    discord::listen(on);
+}
+
+/// Aceita/recusa quem pediu pra ouvir junto pelo Discord.
+#[tauri::command]
+fn discord_respond(user_id: String, accept: bool) {
+    discord::respond(user_id, accept);
+}
+
 #[tauri::command]
 fn discord_status() -> discord::Status {
     discord::current_status()
@@ -543,6 +555,12 @@ fn main() {
             build_tray(app)?;
             media::start_watcher(app.handle().clone());
             discord::start();
+            {
+                let h = app.handle().clone();
+                discord::start_listener(Box::new(move |evt, data| {
+                    let _ = h.emit(evt, data);
+                }));
+            }
             search::warm_up();
             Ok(())
         })
@@ -590,6 +608,8 @@ fn main() {
             discord_set,
             discord_clear,
             discord_status,
+            discord_listen,
+            discord_respond,
             hide_to_tray,
             show_main_window,
             quit_app
