@@ -171,7 +171,7 @@ mod tests {
         assert!(!newer(&version_in_asset("Harle.Player_0.14.0_x64-setup.exe").unwrap(), "0.14.0"));
     }
 
-    use super::{newer, tag_from_location};
+    use super::{newer, tag_from_location, version_in_asset};
 
     #[test]
     fn le_versao_do_redirecionamento() {
