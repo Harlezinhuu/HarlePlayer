@@ -61,14 +61,17 @@ fn check_api() -> Result<UpdateInfo, String> {
         Err(e) => return Err(e.to_string()),
     };
     let v: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    let latest = v["tag_name"].as_str().unwrap_or("").trim_start_matches(['v', 'V']).to_string();
-    let url = v["assets"]
-        .as_array()
-        .and_then(|a| {
-            a.iter().find(|x| x["name"].as_str().map(|n| n.ends_with("_x64-setup.exe")).unwrap_or(false))
-        })
-        .and_then(|x| x["browser_download_url"].as_str())
-        .map(String::from);
+    let tag = v["tag_name"].as_str().unwrap_or("").trim_start_matches(['v', 'V']).to_string();
+    let asset = v["assets"].as_array().and_then(|a| {
+        a.iter().find(|x| x["name"].as_str().map(|n| n.ends_with("_x64-setup.exe")).unwrap_or(false))
+    });
+    let url = asset.and_then(|x| x["browser_download_url"].as_str()).map(String::from);
+    // vale a versão escrita no instalador (Harle.Player_0.14.2_x64-setup.exe), não a da tag:
+    // se a tag estiver diferente do código, não fica oferecendo a mesma versão pra sempre
+    let latest = asset
+        .and_then(|x| x["name"].as_str())
+        .and_then(version_in_asset)
+        .unwrap_or(tag);
     Ok(UpdateInfo {
         available: url.is_some() && newer(&latest, &current),
         current,
@@ -104,6 +107,13 @@ fn check_site() -> Result<UpdateInfo, String> {
         url: Some(url),
         page: location,
     })
+}
+
+/// "Harle.Player_0.14.2_x64-setup.exe" → "0.14.2"
+pub fn version_in_asset(name: &str) -> Option<String> {
+    let v = name.strip_suffix("_x64-setup.exe")?.rsplit('_').next()?;
+    (v.split('.').count() == 3 && v.split('.').all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit())))
+        .then(|| v.to_string())
 }
 
 fn tag_from_location(loc: &str) -> Option<String> {
@@ -151,6 +161,16 @@ pub fn download_and_schedule(url: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn versao_vem_do_nome_do_instalador() {
+        assert_eq!(version_in_asset("Harle.Player_0.14.0_x64-setup.exe").as_deref(), Some("0.14.0"));
+        assert_eq!(version_in_asset("Harle.Player_1.2.10_x64-setup.exe").as_deref(), Some("1.2.10"));
+        assert_eq!(version_in_asset("outro.exe"), None);
+        // tag 0.14.1 com instalador 0.14.0 → quem tem a 0.14.0 não vê atualização
+        assert!(!newer(&version_in_asset("Harle.Player_0.14.0_x64-setup.exe").unwrap(), "0.14.0"));
+    }
+
     use super::{newer, tag_from_location};
 
     #[test]
