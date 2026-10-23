@@ -358,7 +358,9 @@ fn build_activity(p: &Presence) -> Value {
     assets.insert("small_text".into(), json!(fit(&p.service_name, 128)));
 
     let mut activity = json!({
-        "type": 2, // "Ouvindo"
+        // "Ouvindo" (2). Com sala aberta vira "Jogando" (0): o Discord só desenha a festa
+        // ("1 de 20") e o botão "Pedir para participar" em atividade de jogo.
+        "type": if p.party.is_some() { 0 } else { 2 },
         "details": fit(&p.title, 128),
         "state": fit(if p.artist.trim().is_empty() { &p.service_name } else { &p.artist }, 128),
         "assets": Value::Object(assets),
@@ -590,6 +592,8 @@ mod tests {
         assert_eq!(a["party"]["size"], json!([2, 20]));
         assert_eq!(a["secrets"]["join"], "K7QM-2X9P-RT4W-H8NA");
         assert!(a.get("buttons").is_none(), "o Discord recusa botão de link junto com festa");
+        assert_eq!(a["type"], 0, "festa só aparece em atividade de jogo");
+        assert_eq!(build_activity(&exemplo())["type"], 2, "sem sala continua \"Ouvindo\"");
     }
 
     #[test]
