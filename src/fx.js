@@ -37,12 +37,16 @@ export function createFx(canvas, { getAccent }) {
     }
   }
 
+  // a cor de destaque vem do CSS: ler todo quadro forçava o navegador a recalcular o estilo
+  let accent = [255, 255, 255], accentAt = -1e9;
   function frame(t) {
     raf = requestAnimationFrame(frame);
+    if (t - last < 24) return; // ~40 fps: suave e bem mais leve em monitor de 144 Hz
     const dt = Math.min(0.05, (t - (last || t)) / 1000);
     last = t;
+    if (t - accentAt > 500) { accent = getAccent(); accentAt = t; }
     ctx.clearRect(0, 0, W, H);
-    const [r, g, b] = getAccent();
+    const [r, g, b] = accent;
     ctx.globalCompositeOperation = "lighter";
 
     // partículas de fundo: sobem devagar e "acendem" com o grave

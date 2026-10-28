@@ -804,6 +804,7 @@ const app = {
   get stats() { return wrapped.stats; },
   get stepVolume() { return desktop.stepVolume; },
   get store() { return store; },
+  get syncVisualizer() { return syncVisualizer; },
   get toTrack() { return toTrack; },
   get toast() { return toast; },
   get toggleLyrics() { return settingsUi.toggleLyrics; },
@@ -1169,6 +1170,8 @@ let lastSec = -1;
 let beat = 0;
 let beatTarget = 0;
 let beatShown = -1;
+let beatTargets = null;
+const beatEls = () => (beatTargets ||= ["#bg", "#clock", "#carousel"].map((s) => $(s)).filter(Boolean));
 function updateBeat() {
   const on = vizOn() && media.available && media.playing;
   const target = on ? beatTarget : 0;
@@ -1177,7 +1180,9 @@ function updateBeat() {
   fx.setLevel(settings.particles ? beat : 0);
   if (Math.abs(beat - beatShown) > 0.004) {
     beatShown = beat;
-    document.documentElement.style.setProperty("--beat", beat.toFixed(3));
+    // só nos 3 lugares que pulsam: na raiz, cada pulso recalculava o estilo da tela inteira
+    const v = beat.toFixed(3);
+    for (const el of beatEls()) el.style.setProperty("--beat", v);
   }
 }
 // ---------- efeitos: partículas, ondas nas batidas e explosão no drop ----------
@@ -1232,14 +1237,20 @@ if (api.demo) {
   }, 33);
 }
 
-function frame() {
+let lastFrame = 0;
+function frame(t) {
   requestAnimationFrame(frame);
+  if (t - lastFrame < 31) return; // ~30 fps chega pra barra, letra e pulso
+  lastFrame = t;
   updateBeat();
   if (paused) return;
+  if (!keyOf(media)) return; // nada tocando: nada pra mover
   const pos = positionNow();
   const pct = media.durationMs > 0 ? (pos / media.durationMs) * 100 : 0;
-  $("#progressFill").style.width = `${pct}%`;
-  $("#ncFill").style.width = `${pct}%`;
+  // scaleX em vez de width: não recalcula o layout da tela
+  const sx = `scaleX(${Math.min(1, Math.max(0, pct / 100)).toFixed(4)})`;
+  $("#progressFill").style.transform = sx;
+  $("#ncFill").style.transform = sx;
   const sec = Math.floor(pos / 1000);
   if (sec !== lastSec) {
     lastSec = sec;
@@ -1536,6 +1547,7 @@ function setWallpaperMode(on, fromTray = false) {
   settings.wallpaperMode = on;
   saveSettings();
   settingsUi.renderSettings();
+  syncVisualizer();
   if (fromTray) return;
   api
     .invoke("set_wallpaper_mode", { enabled: on })
@@ -1546,6 +1558,37 @@ function setWallpaperMode(on, fromTray = false) {
       settingsUi.renderSettings();
       toast(String(err), 4500);
     });
+}
+
+// ===================================================================
+// Visualizador (escuta o som do PC) só quando alguém está vendo: janela
+// principal aberta, mini player aberto ou wallpaper animado. Minimizado ou
+// na bandeja (jogando, por exemplo), ele para e não gasta nada.
+// ===================================================================
+let mainVisible = !document.hidden;
+let vizOnNow = null;
+function syncVisualizer() {
+  if (IS_WALLPAPER) return;
+  const miniOpen = $("#btnMini")?.classList.contains("on");
+  const wallpaper = settings.wallpaperMode && settings.wallpaperVisualizer !== false;
+  const need = !!(settings.visualizer && (mainVisible || miniOpen || wallpaper));
+  if (need === vizOnNow) return;
+  vizOnNow = need;
+  api.invoke("set_visualizer", { on: need }).catch(() => {});
+}
+if (!IS_WALLPAPER) {
+  document.addEventListener("visibilitychange", () => {
+    mainVisible = !document.hidden;
+    syncVisualizer();
+  });
+  api.listen("main-minimized", () => {
+    mainVisible = false;
+    syncVisualizer();
+  });
+  api.listen("main-restored", () => {
+    mainVisible = true;
+    syncVisualizer();
+  });
 }
 
 // ===================================================================
@@ -1904,6 +1947,7 @@ if (!IS_WALLPAPER) {
   api.listen("mini-mode", (on) => {
     $("#btnMini")?.classList.toggle("on", !!on);
     if (!on) settingsUi.miniAuto = false; // fechou pelo × do próprio mini
+    syncVisualizer();
   });
 }
 if (IS_WALLPAPER) {
@@ -1924,7 +1968,7 @@ if (!IS_WALLPAPER && settings.wallpaperMode) {
   });
 }
 
-if (!IS_WALLPAPER && settings.visualizer) api.invoke("set_visualizer", { on: true }).catch(() => {});
+syncVisualizer();
 if (!IS_WALLPAPER && settings.remote) remoteUi.setRemote(true, true);
 if (!IS_WALLPAPER && settings.hotkeys) desktop.setHotkeys(true, true);
 if (!IS_WALLPAPER) $("#swNotify").classList.toggle("on", settings.notify);

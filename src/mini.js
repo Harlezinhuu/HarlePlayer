@@ -28,14 +28,24 @@ function apply(n) {
   document.body.classList.toggle("playing", !!now.playing);
 }
 
-function frame() {
+// O mini fica por cima do jogo: ~30 atualizações por segundo e só mexe no que mudou
+// (antes rodava na taxa do monitor, 144x/s, e reescrevia tudo todo quadro).
+let lastT = 0, lastTime = "", lastBeat = -1;
+function frame(t) {
   requestAnimationFrame(frame);
+  if (t - lastT < 31) return;
+  lastT = t;
   const pos = now.playing ? now.positionMs + (Date.now() - now.at) : now.positionMs;
   const p = now.durationMs > 0 ? Math.min(1, pos / now.durationMs) : 0;
-  $("#fill").style.width = `${p * 100}%`;
-  $("#time").textContent = now.durationMs ? `${fmt(Math.min(pos, now.durationMs))} / ${fmt(now.durationMs)}` : "";
+  $("#fill").style.transform = `scaleX(${p.toFixed(4)})`;
+  const time = now.durationMs ? `${fmt(Math.min(pos, now.durationMs))} / ${fmt(now.durationMs)}` : "";
+  if (time !== lastTime) $("#time").textContent = lastTime = time;
   beat += (beatTarget - beat) * (beatTarget > beat ? 0.5 : 0.12);
-  document.documentElement.style.setProperty("--beat", beat.toFixed(3));
+  if (beat < 0.004) beat = 0;
+  if (Math.abs(beat - lastBeat) > 0.004) {
+    lastBeat = beat;
+    document.documentElement.style.setProperty("--beat", beat.toFixed(3));
+  }
 }
 requestAnimationFrame(frame);
 

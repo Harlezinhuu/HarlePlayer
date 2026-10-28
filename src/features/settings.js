@@ -282,13 +282,14 @@ export function initSettings(app) {
     saveSettings();
     renderSettings();
     applyFx();
-    api.invoke("set_visualizer", { on: settings.visualizer }).catch(() => {});
+    app.syncVisualizer();
   });
   $("#swWallViz").addEventListener("click", () => {
     if (!settings.visualizer) return toast("Ligue o \"Reagir ao som\" primeiro");
     settings.wallpaperVisualizer = !settings.wallpaperVisualizer;
     saveSettings(); // o wallpaper recarrega sozinho quando as configurações mudam
     renderSettings();
+    app.syncVisualizer();
     toast(settings.wallpaperVisualizer ? "O wallpaper volta a pulsar com o som" : "Wallpaper parado: só o app reage ao som");
   });
   $("#btnLyrics").addEventListener("click", toggleLyrics);

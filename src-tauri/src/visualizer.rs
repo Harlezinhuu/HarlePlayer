@@ -112,9 +112,11 @@ mod imp {
 
         let mut an = Analyzer::new(rate);
         let mut last = Instant::now();
+        let mut was_silent = false;
         let result = (|| -> windows::core::Result<()> {
             while ON.load(Ordering::SeqCst) {
-                std::thread::sleep(Duration::from_millis(10));
+                // o buffer do Windows guarda 200 ms: acordar a cada 20 ms já sobra
+                std::thread::sleep(Duration::from_millis(20));
                 let mut packet = cap.GetNextPacketSize()?;
                 while packet > 0 {
                     let mut data: *mut u8 = std::ptr::null_mut();
@@ -144,13 +146,24 @@ mod imp {
                 if last.elapsed() >= Duration::from_millis(33) {
                     last = Instant::now();
                     let (b, l) = an.take();
-                    let _ = app.emit("audio-level", [b, l]);
+                    // silêncio: avisa uma vez e para de mandar até voltar som
+                    let silent = b < 0.003 && l < 0.003;
+                    if silent && was_silent {
+                        continue;
+                    }
+                    was_silent = silent;
+                    // só pras janelas que desenham o grave (não pro aviso/letra flutuante)
+                    for w in ["main", "wallpaper", "mini"] {
+                        let _ = app.emit_to(w, "audio-level", [b, l]);
+                    }
                 }
             }
             Ok(())
         })();
         let _ = client.Stop();
-        let _ = app.emit("audio-level", [0.0f32, 0.0f32]);
+        for w in ["main", "wallpaper", "mini"] {
+            let _ = app.emit_to(w, "audio-level", [0.0f32, 0.0f32]);
+        }
         result
     }
 }

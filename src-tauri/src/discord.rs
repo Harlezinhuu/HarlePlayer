@@ -429,7 +429,15 @@ pub fn start_listener(emit: Emit) {
         let mut conn: Option<Conn> = None;
         let mut retry_at = std::time::Instant::now();
         loop {
-            while let Ok(m) = rx.try_recv() {
+            let mut inbox: Vec<ListenMsg> = rx.try_iter().collect();
+            // desligado: dorme até chegar um comando (sem acordar à toa)
+            if !enabled && inbox.is_empty() {
+                match rx.recv() {
+                    Ok(m) => inbox.push(m),
+                    Err(_) => break,
+                }
+            }
+            for m in inbox {
                 match m {
                     ListenMsg::Enable(on) => {
                         enabled = on;
@@ -450,7 +458,6 @@ pub fn start_listener(emit: Emit) {
                 }
             }
             if !enabled {
-                std::thread::sleep(Duration::from_millis(400));
                 continue;
             }
             if conn.is_none() && std::time::Instant::now() >= retry_at {

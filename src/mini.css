@@ -42,4 +42,4 @@ body.playing .i-play { display: none; }
 .corner button:hover { background: rgba(255,255,255,.22); }
 .corner svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; }
 .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.1); }
-#fill { height: 100%; width: 0; background: rgb(var(--accent)); box-shadow: 0 0 8px rgba(var(--accent), .8); }
+#fill { height: 100%; width: 100%; transform: scaleX(0); transform-origin: left; background: rgb(var(--accent)); box-shadow: 0 0 8px rgba(var(--accent), .8); }

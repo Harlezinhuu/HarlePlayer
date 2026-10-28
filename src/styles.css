@@ -230,11 +230,12 @@ body.clock-outline #time {
 .q-artist { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .now-item .q-artist { color: rgba(255, 255, 255, 0.78); }
 .eq { display: flex; gap: 2px; align-items: flex-end; height: 14px; flex: none; }
-.eq i { width: 3px; background: #fff; border-radius: 2px; height: 30%; }
-body.playing .eq i { animation: eq 0.9s ease-in-out infinite; }
+/* anima com transform (a placa de vídeo faz sozinha); animar "height" recalculava o layout da tela a cada quadro */
+.eq i { width: 3px; background: #fff; border-radius: 2px; height: 100%; transform: scaleY(.3); transform-origin: bottom; }
+body.playing .eq i { animation: eq 0.9s ease-in-out infinite; will-change: transform; }
 .eq i:nth-child(2) { animation-delay: -0.3s !important; }
 .eq i:nth-child(3) { animation-delay: -0.6s !important; }
-@keyframes eq { 0%, 100% { height: 25%; } 50% { height: 100%; } }
+@keyframes eq { 0%, 100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
 
 /* ---------- palco / carrossel ---------- */
 #stage {
@@ -404,7 +405,7 @@ body.playing .ico-play { display: none !important; }
 .progress { position: absolute; left: 50px; right: 0; bottom: -6px; height: 10px; cursor: pointer; }
 .progress::before, #progressFill { content: ""; position: absolute; left: 0; top: 4px; height: 3px; border-radius: 3px; }
 .progress::before { right: 0; background: rgba(255, 255, 255, 0.14); }
-#progressFill { width: 0; background: rgb(var(--accent)); box-shadow: 0 0 10px rgba(var(--accent), .7); }
+#progressFill { width: 100%; transform: scaleX(0); transform-origin: left; background: rgb(var(--accent)); box-shadow: 0 0 10px rgba(var(--accent), .7); }
 .progress:hover::before, .progress:hover #progressFill { height: 5px; top: 3px; }
 
 .tools { display: flex; gap: 4px; }
@@ -571,7 +572,7 @@ body.mode-wallpaper.has-media #nowCard {
 #ncTitle { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ncArtist { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nc-bar { position: relative; height: 3px; margin-top: 9px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
-#ncFill { position: absolute; inset: 0 auto 0 0; width: 0; background: rgb(var(--accent)); }
+#ncFill { position: absolute; inset: 0 auto 0 0; width: 100%; transform: scaleX(0); transform-origin: left; background: rgb(var(--accent)); }
 
 /* jogo em tela cheia → congela tudo */
 body.paused *, body.paused *::before, body.paused *::after { animation-play-state: paused !important; }
