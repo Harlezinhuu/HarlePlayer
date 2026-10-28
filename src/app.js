@@ -180,9 +180,13 @@ function openInService(query, directLink) {
     .catch((e) => toast(String(e)));
 }
 
+/** Sessão de mídia do próprio Harle Player vista pelo Windows (o player do YouTube
+ *  escondido também se anuncia lá, com o nome do vídeo e do canal). */
+const isOwnSession = (s) => /harle/i.test(s?.source || "");
+
 function control(action, positionMs) {
   // Música tocando no player interno → controla ele; senão, o app de música do Windows.
-  if (player?.active && local) {
+  if (player?.active && (local || isOwnSession(media))) {
     if (action === "toggle") return player.toggle();
     if (action === "next") return player.next();
     if (action === "prev") return player.prev();
@@ -1775,6 +1779,12 @@ function render() {
 
 function onMedia(s, fromLocal = false) {
   if (!s) return;
+  // O Windows também enxerga o próprio player (no YouTube, com o nome do vídeo):
+  // isso não é "outro app tocando", então nunca tira o controle do player interno.
+  if (!fromLocal && isOwnSession(s)) {
+    if (player?.active) return;
+    s = { available: false, title: "", artist: "", album: "", playing: false, positionMs: 0, durationMs: 0, updatedAtMs: Date.now() };
+  }
   if (!fromLocal && local) {
     // Enquanto o player interno tem música, ignora o Windows (que também enxerga
     // o próprio player) — a não ser que outro app comece a tocar outra coisa.
