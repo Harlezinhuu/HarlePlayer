@@ -20,6 +20,19 @@ pub struct SearchResult {
     pub source: String,
     pub tracks: Vec<Track>,
     pub artists: Vec<Artist>,
+    pub albums: Vec<Album>,
+}
+
+/// Álbum (ou EP/single) da busca. `url` é o que o app importa pra tocar inteiro.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Album {
+    pub name: String,
+    pub artist: String,
+    pub year: Option<String>,
+    pub cover: Option<String>,
+    pub url: String,
+    pub count: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -51,19 +64,19 @@ pub struct SearchPage {
     pub source: String,
     pub tracks: Vec<Track>,
     pub artists: Vec<Artist>,
+    pub albums: Vec<Album>,
     /// passa de volta pra pegar a próxima página; None = acabou
     pub next: Option<String>,
 }
 
-/// kind: "tracks" | "artists". cursor: o `next` da página anterior.
+/// kind: "tracks" | "artists" | "albums". cursor: o `next` da página anterior.
 pub fn search_page(service: &str, query: &str, kind: &str, cursor: Option<&str>) -> Result<SearchPage, String> {
     let q = query.trim();
     if q.is_empty() {
         return Ok(SearchPage::default());
     }
-    let artists = kind == "artists";
     match service {
-        "soundcloud" => soundcloud::page(q, artists, cursor),
+        "soundcloud" => soundcloud::page(q, kind, cursor),
         "ytmusic" => ytmusic::page(q, kind, cursor),
         other => Err(format!("Busca não disponível para {other}")),
     }
@@ -102,6 +115,10 @@ pub fn classify_link(url: &str) -> Option<(&'static str, String, String)> {
     }
     if lower.contains("soundcloud.com/") && !lower.contains("api-v2.") {
         return Some(("soundcloud", "set".into(), u.split(['?', '#']).next()?.to_string()));
+    }
+    if lower.contains("music.youtube.com/browse/mpreb") {
+        let id = u.split("/browse/").nth(1)?.split(['?', '#', '/']).next()?.to_string();
+        return Some(("youtube", "album".into(), id));
     }
     if lower.contains("youtube.com/") || lower.contains("youtu.be/") {
         let q = u.split('?').nth(1)?;
@@ -836,20 +853,38 @@ mod soundcloud {
     }
 
     /// Página da busca completa: 30 por vez, até ~300 resultados.
-    pub fn page(q: &str, artists: bool, cursor: Option<&str>) -> Result<SearchPage, String> {
+    pub fn page(q: &str, kind: &str, cursor: Option<&str>) -> Result<SearchPage, String> {
         const LIMIT: u32 = 30;
         let offset: u32 = cursor.and_then(|c| c.parse().ok()).unwrap_or(0);
-        let path = if artists { "search/users" } else { "search/tracks" };
+        let path = match kind { "artists" => "search/users", "albums" => "search/albums", _ => "search/tracks" };
         let v = api_at(path, q, LIMIT, offset)?;
         let empty = Value::Null;
-        let r = if artists { parse(&empty, &v) } else { parse(&v, &empty) };
         let got = v["collection"].as_array().map(|a| a.len()).unwrap_or(0) as u32;
         let more = got > 0 && v["next_href"].as_str().is_some() && offset + LIMIT < 300;
+        let next = more.then(|| (offset + LIMIT).to_string());
+        if kind == "albums" {
+            let albums = v["collection"].as_array().map(|a| a.iter().filter_map(album).collect()).unwrap_or_default();
+            return Ok(SearchPage { source: "soundcloud".into(), albums, next, ..Default::default() });
+        }
+        let r = if kind == "artists" { parse(&empty, &v) } else { parse(&v, &empty) };
         Ok(SearchPage {
             source: "soundcloud".into(),
             tracks: r.tracks,
             artists: r.artists,
-            next: more.then(|| (offset + LIMIT).to_string()),
+            albums: Vec::new(),
+            next,
+        })
+    }
+
+    fn album(p: &Value) -> Option<Album> {
+        let year = p["release_date"].as_str().or(p["created_at"].as_str()).and_then(|d| d.get(..4)).map(String::from);
+        Some(Album {
+            name: p["title"].as_str()?.to_string(),
+            artist: p["user"]["username"].as_str().unwrap_or("").to_string(),
+            year,
+            cover: big(p["artwork_url"].as_str()).or_else(|| big(p["user"]["avatar_url"].as_str())),
+            url: p["permalink_url"].as_str()?.to_string(),
+            count: p["track_count"].as_i64(),
         })
     }
 
@@ -905,6 +940,7 @@ mod soundcloud {
             source: "soundcloud".into(),
             tracks,
             artists,
+            albums: Vec::new(),
         }
     }
 }
@@ -921,6 +957,7 @@ mod ytmusic {
     const FILTER_SONGS: &str = "EgWKAQIIAWoMEA4QChADEAQQCRAF";
     const FILTER_ARTISTS: &str = "EgWKAQIgAWoMEA4QChADEAQQCRAF";
     const FILTER_VIDEOS: &str = "EgWKAQIQAWoMEA4QChADEAQQCRAF";
+    const FILTER_ALBUMS: &str = "EgWKAQIYAWoMEA4QChADEAQQCRAF";
 
     fn post(url: &str, body: &Value) -> Result<Value, String> {
         let resp = ureq::post(url)
@@ -948,34 +985,34 @@ mod ytmusic {
     }
 
     /// Página da busca completa (filtrada em músicas ou artistas), com continuação.
-    /// kind: "tracks" | "artists" | "videos" (clipes)
+    /// kind: "tracks" | "artists" | "albums" | "videos" (clipes)
     pub fn page(q: &str, kind: &str, cursor: Option<&str>) -> Result<SearchPage, String> {
-        let artists = kind == "artists";
         let base = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false";
         let v = match cursor {
             Some(c) => post(&format!("{base}&ctoken={0}&continuation={0}&type=next", enc(c)), &json!({ "context": context() }))?,
             None => post(base, &json!({
                 "context": context(),
                 "query": q,
-                "params": match kind { "artists" => FILTER_ARTISTS, "videos" => FILTER_VIDEOS, _ => FILTER_SONGS },
+                "params": match kind { "artists" => FILTER_ARTISTS, "videos" => FILTER_VIDEOS, "albums" => FILTER_ALBUMS, _ => FILTER_SONGS },
             }))?,
         };
-        Ok(page_from(&v, artists))
+        Ok(page_from(&v, kind))
     }
 
-    pub(super) fn page_from(v: &Value, artists: bool) -> SearchPage {
+    pub(super) fn page_from(v: &Value, kind: &str) -> SearchPage {
         let mut out = SearchResult::default();
         let mut seen = HashSet::new();
         walk(v, &mut out, &mut seen);
         let next = find_continuation(v);
-        let (tracks, artists_v) = if artists { (Vec::new(), out.artists) } else { (out.tracks, Vec::new()) };
-        let got = tracks.len() + artists_v.len();
-        SearchPage {
-            source: "ytmusic".into(),
-            tracks,
-            artists: artists_v,
-            next: if got > 0 { next } else { None },
+        let mut page = SearchPage { source: "ytmusic".into(), ..Default::default() };
+        match kind {
+            "artists" => page.artists = out.artists,
+            "albums" => page.albums = out.albums,
+            _ => page.tracks = out.tracks,
         }
+        let got = page.tracks.len() + page.artists.len() + page.albums.len();
+        page.next = if got > 0 { next } else { None };
+        page
     }
 
     /// Token de "mais resultados" (o nome do campo muda de versão pra versão do site).
@@ -999,7 +1036,8 @@ mod ytmusic {
     /// Playlist do YouTube / YouTube Music pelo id (list=…), até 500 faixas.
     pub fn import(list: &str) -> Result<ImportedPlaylist, String> {
         let base = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false";
-        let browse_id = if list.starts_with("VL") { list.to_string() } else { format!("VL{list}") };
+        // álbum sem playlist pública (MPREb…) abre direto pela página do álbum
+        let browse_id = if list.starts_with("VL") || list.starts_with("MPREb") { list.to_string() } else { format!("VL{list}") };
         let first = post(base, &json!({ "context": context(), "browseId": browse_id }))?;
         let mut out = SearchResult::default();
         let mut seen = HashSet::new();
@@ -1031,7 +1069,11 @@ mod ytmusic {
             source: "youtube".into(),
             name: name.unwrap_or_else(|| "Playlist do YouTube".into()),
             cover: cover.or_else(|| out.tracks[0].cover.clone()),
-            open_url: format!("https://music.youtube.com/playlist?list={}", list.trim_start_matches("VL")),
+            open_url: if list.starts_with("MPREb") {
+                format!("https://music.youtube.com/browse/{list}")
+            } else {
+                format!("https://music.youtube.com/playlist?list={}", list.trim_start_matches("VL"))
+            },
             tracks: out.tracks,
         })
     }
@@ -1225,6 +1267,37 @@ mod ytmusic {
         }
     }
 
+    /// O play do álbum aponta pra playlist dele (OLAK5uy_…), que o app sabe importar.
+    fn album_playlist(v: &Value) -> Option<String> {
+        match v {
+            Value::Object(m) => {
+                if let Some(id) = m.get("watchPlaylistEndpoint").and_then(|w| w["playlistId"].as_str()) {
+                    return Some(id.to_string());
+                }
+                m.values().find_map(album_playlist)
+            }
+            Value::Array(a) => a.iter().find_map(album_playlist),
+            _ => None,
+        }
+    }
+
+    fn push_album(out: &mut SearchResult, seen: &mut HashSet<String>, name: String, nav: &Value, item: &Value, sub: &[&Value]) {
+        let Some(browse) = nav["browseEndpoint"]["browseId"].as_str() else { return };
+        if !seen.insert(browse.to_string()) {
+            return;
+        }
+        let url = match album_playlist(&item["overlay"]).or_else(|| album_playlist(&item["menu"])) {
+            Some(pl) => format!("https://music.youtube.com/playlist?list={pl}"),
+            None => format!("https://music.youtube.com/browse/{browse}"),
+        };
+        let year = sub
+            .iter()
+            .filter_map(|r| r["text"].as_str())
+            .find(|t| t.len() == 4 && t.chars().all(|c| c.is_ascii_digit()))
+            .map(String::from);
+        out.albums.push(Album { name, artist: artist_from(sub), year, cover: thumb(item), url, count: None });
+    }
+
     fn column(cols: &[Value], i: usize) -> &Value {
         cols.get(i)
             .map(|c| &c["musicResponsiveListItemFlexColumnRenderer"]["text"])
@@ -1243,8 +1316,12 @@ mod ytmusic {
             push_artist(out, seen, title, nav, item);
             return;
         }
+        if page_type(nav) == "MUSIC_PAGE_TYPE_ALBUM" {
+            push_album(out, seen, title, nav, item, &runs(col(1)));
+            return;
+        }
         if nav.get("browseEndpoint").is_some() {
-            return; // álbum, playlist, podcast…
+            return; // playlist, podcast…
         }
         let vid = item["playlistItemData"]["videoId"]
             .as_str()
@@ -1562,6 +1639,23 @@ mod tests {
             assert!(p1.next.is_some(), "{svc}: sem 'carregar mais'");
             assert!(total > p1.tracks.len(), "{svc}: página 2 vazia");
             assert!(!a.artists.is_empty(), "{svc}: sem artistas");
+        }
+    }
+
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_albuns() {
+        for svc in ["ytmusic", "soundcloud"] {
+            let p = search_page(svc, "juice wrld", "albums", None).unwrap_or_else(|e| panic!("{svc}: álbuns falhou: {e}"));
+            println!("Álbuns {svc}: {} (mais={})", p.albums.len(), p.next.is_some());
+            for a in p.albums.iter().take(3) {
+                println!("  {} — {} ({:?}) {}", a.name, a.artist, a.year, a.url);
+            }
+            assert!(!p.albums.is_empty(), "{svc}: nenhum álbum");
+            let first = &p.albums[0];
+            let pl = import_playlist(&first.url).unwrap_or_else(|e| panic!("{svc}: abrir o álbum falhou: {e} ({})", first.url));
+            println!("  abriu '{}' com {} faixas", pl.name, pl.tracks.len());
+            assert!(!pl.tracks.is_empty());
         }
     }
 
