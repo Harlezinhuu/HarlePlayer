@@ -57,7 +57,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
 ### 🔎 Search
 - **Paste a link and it plays**: a song link from YouTube, YouTube Music (even `youtu.be` and Shorts) or SoundCloud in the search box, or `Ctrl+V` anywhere in the app, and it starts playing. Spotify links open in the Spotify app (counts toward Wrapped).
 - **Searches SoundCloud and YouTube Music directly**, including tracks that only exist on SoundCloud (remixes, unreleased…).
-- **All · Songs · Artists tabs**: top results and the full list, which loads more as you scroll. Click a song and it plays, with the rest of the list becoming the queue.
+- **All · Songs · Albums · Artists tabs**: top results and the full list, which loads more as you scroll. Click a song and it plays, with the rest of the list becoming the queue. Click an album and it plays in order, and **+** saves it to your playlists.
 - For other services, or if the site's search fails, results come from Deezer.
 
 ### 📊 Your recap

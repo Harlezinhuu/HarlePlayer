@@ -765,6 +765,7 @@ const app = {
   get openInService() { return openInService; },
   get openTrackMenu() { return libraryUi.openTrackMenu; },
   get partyUi() { return partyUi; },
+  get playAlbum() { return libraryUi.playAlbum; },
   get playItem() { return playItem; },
   get playLink() { return libraryUi.playLink; },
   get playModes() { return playModes; },
@@ -1281,6 +1282,31 @@ async function deezerSearch(q) {
   };
 }
 
+/** Fileira "Álbuns" no "Tudo" (só onde dá pra tocar o álbum aqui dentro). */
+async function loadAlbumsRow(q, svc, seq) {
+  const head = $("#resAlbumsHead"), row = $("#resAlbums");
+  const show = (on) => { head.hidden = row.hidden = !on; };
+  if (!NATIVE_SEARCH[svc] || !player) return show(false);
+  show(true);
+  row.innerHTML = skeleton(6);
+  try {
+    const page = await Promise.race([
+      api.invoke("search_page", { service: NATIVE_SEARCH[svc], query: q, kind: "albums", cursor: null }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("tempo")), 12000)),
+    ]);
+    if (seq !== searchSeq) return;
+    const albums = (page?.albums || []).slice(0, 10);
+    if (!albums.length) return show(false);
+    row.innerHTML = albums.map((al, i) => searchUi.albumTile(al, `data-ral="${i}"`)).join("");
+    row.onclick = (e) => {
+      const el = e.target.closest("[data-ral]");
+      if (el) searchUi.albumClick(e, albums[+el.dataset.ral], page.source, el);
+    };
+  } catch {
+    if (seq === searchSeq) show(false);
+  }
+}
+
 async function runSearch(q) {
   q = q.trim();
   if (!q) return closeSearch();
@@ -1292,6 +1318,7 @@ async function runSearch(q) {
   $("#resNote").textContent = "";
   $("#resTracks").innerHTML = skeleton(7);
   $("#resArtists").innerHTML = skeleton(7, "round");
+  loadAlbumsRow(q, svc, seq);
 
   let res = null;
   let note = "";

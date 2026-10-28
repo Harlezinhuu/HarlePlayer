@@ -1,4 +1,4 @@
-// Busca completa: abas Tudo · Músicas · Artistas, com "carregar mais"
+// Busca completa: abas Tudo · Músicas · Álbuns · Artistas, com "carregar mais"
 
 import { fmt, esc } from "../lib.js";
 
@@ -25,13 +25,16 @@ export function initSearch(app) {
     const index = +(cursor || 0);
     const url = kind === "artists"
       ? `https://api.deezer.com/search/artist?q=${enc(q)}&limit=40&index=${index}`
-      : `https://api.deezer.com/search?q=${enc(q)}&limit=40&index=${index}`;
+      : kind === "albums"
+        ? `https://api.deezer.com/search/album?q=${enc(q)}&limit=40&index=${index}`
+        : `https://api.deezer.com/search?q=${enc(q)}&limit=40&index=${index}`;
     const r = await httpJson(url);
     const data = r?.data || [];
     return {
       source: "deezer",
-      tracks: kind === "artists" ? [] : data.map((t) => ({ title: t.title_short || t.title, artist: t.artist?.name || "", cover: t.album?.cover_medium || "", url: t.link, durationMs: (t.duration || 0) * 1000 })),
+      tracks: kind === "tracks" ? data.map((t) => ({ title: t.title_short || t.title, artist: t.artist?.name || "", cover: t.album?.cover_medium || "", url: t.link, durationMs: (t.duration || 0) * 1000 })) : [],
       artists: kind === "artists" ? data.map((a) => ({ name: a.name, picture: a.picture_medium || "", url: a.link })) : [],
+      albums: kind === "albums" ? data.map((a) => ({ name: a.title, artist: a.artist?.name || "", cover: a.cover_medium || "", url: a.link, count: a.nb_tracks || null, year: null })) : [],
       next: r?.next && data.length ? String(index + data.length) : null,
     };
   }
@@ -69,7 +72,7 @@ export function initSearch(app) {
       }
       if (my !== full.seq) return;
       if (!full.source) full.source = page.source;
-      const got = kind === "artists" ? page.artists || [] : page.tracks || [];
+      const got = kind === "artists" ? page.artists || [] : kind === "albums" ? page.albums || [] : page.tracks || [];
       // a mesma música pode voltar em duas páginas
       const have = new Set(full.items.map((x) => x.url));
       full.items.push(...got.filter((x) => !have.has(x.url)));
@@ -86,6 +89,28 @@ export function initSearch(app) {
     }
   }
 
+  // ---------- álbuns ----------
+  const PLUS = `<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>`;
+  const PLAY = `<svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg>`;
+  function albumTile(al, attr) {
+    const sub = [al.artist, al.year].filter(Boolean).join(" · ") || (al.count ? `${al.count} músicas` : "");
+    return `<div class="res-tile" ${attr} title="Tocar o álbum">${al.cover ? `<img src="${esc(al.cover)}" alt="" loading="lazy" draggable="false">` : `<div class="sk"></div>`}<button class="tile-add" data-aladd title="Salvar nas suas playlists">${PLUS}</button><span class="tile-play">${PLAY}</span><b>${esc(al.name)}</b><span>${esc(sub)}</span></div>`;
+  }
+  /** Clique num álbum: toca inteiro (SoundCloud/YouTube) ou abre no serviço (Deezer etc.). */
+  async function albumClick(e, al, source, el) {
+    if (!al) return;
+    const playable = source !== "deezer" && player;
+    if (e.target.closest("[data-aladd]")) {
+      e.stopPropagation();
+      if (!playable) return toast("Esse álbum só abre no site do serviço", 3000);
+      return importPlaylistUrl(al.url);
+    }
+    if (!playable) return api.invoke("open_url", { url: al.url }).catch((err) => toast(String(err)));
+    el?.classList.add("busy");
+    await app.playAlbum(al);
+    el?.classList.remove("busy");
+  }
+
   function fullTrack(i) {
     const t = full.items[i];
     const svcOk = PLAYABLE[full.svc] ? full.svc : "ytmusic";
@@ -94,7 +119,10 @@ export function initSearch(app) {
 
   function renderFull() {
     const list = $("#fullList");
-    if (full.kind === "artists") {
+    if (full.kind === "albums") {
+      list.className = "fl-grid";
+      list.innerHTML = full.items.map((al, i) => albumTile(al, `data-fal="${i}"`)).join("");
+    } else if (full.kind === "artists") {
       list.className = "fl-grid artists";
       list.innerHTML = full.items
         .map((a, i) => `<div class="res-tile" data-fa="${i}" title="Ver músicas">${a.picture ? `<img src="${esc(a.picture)}" alt="" loading="lazy" draggable="false">` : `<div class="sk"></div>`}<b>${esc(a.name)}</b></div>`)
@@ -129,13 +157,15 @@ export function initSearch(app) {
     if (full.loading) {
       el.innerHTML = full.kind === "artists"
         ? `<div class="fl-grid artists">${skeleton(full.items.length ? 6 : 12, "round")}</div>`
+        : full.kind === "albums"
+        ? `<div class="fl-grid">${skeleton(full.items.length ? 6 : 12)}</div>`
         : Array.from({ length: full.items.length ? 3 : 10 }, () => `<div class="fl-row sk-row"><span class="fl-n"></span><div class="fl-cover sk"></div><div class="fl-text"><i></i><i></i></div></div>`).join("");
     } else if (full.error && full.items.length) {
       el.innerHTML = `<button class="btn" data-fretry>Tentar de novo</button> <small class="muted">${esc(full.error)}</small>`;
     } else if (!full.done && full.items.length) {
       el.innerHTML = `<button class="btn" data-fretry>Carregar mais</button>`;
     } else {
-      el.innerHTML = full.items.length ? `<small class="muted">${full.items.length} ${full.kind === "artists" ? "artistas" : "músicas"}</small>` : "";
+      el.innerHTML = full.items.length ? `<small class="muted">${full.items.length} ${full.kind === "artists" ? "artistas" : full.kind === "albums" ? "álbuns" : "músicas"}</small>` : "";
     }
   }
 
@@ -169,6 +199,8 @@ export function initSearch(app) {
       }
       return openInService(`${t.title} ${t.artist}`);
     }
+    const al = e.target.closest("[data-fal]");
+    if (al) return albumClick(e, full.items[+al.dataset.fal], full.source, al);
     const art = e.target.closest("[data-fa]");
     if (art) {
       const a = full.items[+art.dataset.fa];
@@ -268,6 +300,8 @@ export function initSearch(app) {
   return {
     get setService() { return setService; },
     get resTab() { return resTab; },
+    get albumTile() { return albumTile; },
+    get albumClick() { return albumClick; },
     get full() { return full; },
     get setResTab() { return setResTab; },
     get loadFull() { return loadFull; },

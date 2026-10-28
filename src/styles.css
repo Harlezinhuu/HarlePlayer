@@ -984,3 +984,14 @@ body.mode-wallpaper #partyPanel { display: none !important; }
 #discordAsk small { font-size: 11.5px; color: var(--muted); }
 #discordAsk .btn { height: 30px; }
 #discordAsk .btn.primary { margin-left: 10px; background: #5865f2; color: #fff; }
+
+/* ===== álbuns na busca ===== */
+.res-tile .tile-add { position: absolute; top: 6px; left: 6px; width: 28px; height: 28px; border-radius: 50%; border: 0; display: grid; place-items: center;
+  background: rgba(10,12,20,.75); color: #fff; opacity: 0; transition: opacity .2s; }
+.res-tile:hover .tile-add { opacity: 1; }
+.res-tile .tile-add svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; }
+.res-tile .tile-play { position: absolute; top: 88px; right: 8px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  background: rgb(var(--accent)); color: #0b1020; opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; pointer-events: none; }
+.res-tile:hover .tile-play { opacity: 1; transform: none; }
+.res-tile .tile-play svg { width: 14px; height: 14px; fill: currentColor; }
+.res-tile.busy img { opacity: .5; }

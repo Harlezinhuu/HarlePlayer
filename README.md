@@ -55,7 +55,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 ### 🔎 Buscar
 - **Cole o link e toca**: link de música do YouTube, YouTube Music (até `youtu.be` e Shorts) ou SoundCloud na busca, ou `Ctrl+V` em qualquer lugar do app, e ela começa a tocar. Link do Spotify abre no app do Spotify (conta pro Wrapped).
 - **Busca direto no SoundCloud e no YouTube Music**, inclusive faixas que só existem no SoundCloud (remix, unreleased…).
-- **Abas Tudo · Músicas · Artistas**: os principais resultados e a lista completa, que carrega mais conforme você rola. Clicou numa música, ela toca e o resto da lista vira a fila.
+- **Abas Tudo · Músicas · Álbuns · Artistas**: os principais resultados e a lista completa, que carrega mais conforme você rola. Clicou numa música, ela toca e o resto da lista vira a fila. Clicou num álbum, ele toca inteiro na ordem, e o **+** salva nas suas playlists.
 - Pros outros serviços, ou se a busca do site falhar, os resultados vêm do Deezer.
 
 ### 📊 Sua retrospectiva

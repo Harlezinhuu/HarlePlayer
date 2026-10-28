@@ -362,6 +362,22 @@ export function initLibrary(app) {
   const isSongLink = (s) => SONG_LINK.test(s.trim());
   const isPlaylistLink = (s) => PLAYLIST_LINK.test(s.trim()) && !isSongLink(s);
 
+  /** Toca um álbum inteiro, na ordem (sem salvar nas playlists). */
+  async function playAlbum(al) {
+    if (!player) return api.invoke("open_url", { url: al.url }).catch(() => {});
+    toast(`Abrindo "${al.name}"…`, 2500);
+    try {
+      const r = await api.invoke("import_playlist", { url: al.url });
+      const svc = r.source === "soundcloud" ? "soundcloud" : "ytmusic";
+      const tracks = r.tracks.map((t) => toTrack({ ...t, cover: t.cover || al.cover, durationMs: t.durationMs || 0 }, svc));
+      if (!tracks.length) throw new Error("álbum vazio");
+      player.playQueue(tracks, 0);
+      toast(`Tocando "${al.name}" · ${tracks.length} ${tracks.length === 1 ? "música" : "músicas"}`, 3000);
+    } catch (e) {
+      toast(`Não deu pra abrir o álbum: ${e?.message || e}`, 4500);
+    }
+  }
+
   /** Cola o link e toca: SoundCloud/YouTube aqui dentro; Spotify no app do Spotify (Wrapped). */
   async function playLink(url) {
     url = url.trim();
@@ -807,6 +823,7 @@ export function initLibrary(app) {
     get importPlaylistUrl() { return importPlaylistUrl; },
     get isSongLink() { return isSongLink; },
     get playLink() { return playLink; },
+    get playAlbum() { return playAlbum; },
     get ICON() { return ICON; },
     get trackFrom() { return trackFrom; },
     get resolveTrack() { return resolveTrack; },

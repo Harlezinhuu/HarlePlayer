@@ -163,6 +163,13 @@ export function createDemoApi() {
         case "search_page": {
           await new Promise((r) => setTimeout(r, 500));
           const page = +(args.cursor || 0);
+          if (args.kind === "albums") {
+            return {
+              source: args.service, tracks: [], artists: [],
+              albums: TRACKS.map((t, i) => ({ name: `${t.title} ${page * TRACKS.length + i + 1}`, artist: t.artist, year: String(2018 + i), cover: t.thumb, url: `https://soundcloud.com/demo/sets/album-${page}-${i}`, count: 7 })),
+              next: page < 2 ? String(page + 1) : null,
+            };
+          }
           const mk = (k) => TRACKS.map((t, i) => ({ title: `${t.title} ${page * TRACKS.length + i + 1}`, artist: t.artist, cover: t.thumb, url: `https://soundcloud.com/demo/${k}-${page}-${i}`, durationMs: t.durationMs }));
           return {
             source: args.service,
