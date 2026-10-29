@@ -217,6 +217,17 @@ pub fn track_from_link(url: &str) -> Result<LinkedTrack, String> {
     Err("Link não reconhecido (cole um link do YouTube, YouTube Music, SoundCloud ou Spotify)".into())
 }
 
+/// "Rádio": músicas parecidas com esta (pra continuar tocando quando a fila acaba).
+pub fn radio(url: &str) -> Result<Vec<Track>, String> {
+    if let Some(id) = youtube_video_id(url) {
+        return ytmusic::radio(&id);
+    }
+    if url.to_lowercase().contains("soundcloud.com/") {
+        return soundcloud::related(url);
+    }
+    Err("Sem rádio pra esse serviço".into())
+}
+
 /// Perfil público do SoundCloud: curtidas e playlists, sem login.
 pub fn soundcloud_profile(profile: &str) -> Result<Profile, String> {
     soundcloud::profile(profile)
@@ -608,6 +619,19 @@ mod soundcloud {
             open_url: v["permalink_url"].as_str().unwrap_or(url).to_string(),
             tracks,
         })
+    }
+
+    /// Músicas relacionadas (a "rádio" do SoundCloud).
+    pub fn related(url: &str) -> Result<Vec<Track>, String> {
+        let clean = url.trim().split(['?', '#']).next().unwrap_or(url);
+        let t = api_get(&format!("https://api-v2.soundcloud.com/resolve?url={}", enc(clean)))?;
+        let id = t["id"].as_i64().ok_or("música sem id")?;
+        let v = api_get(&format!("https://api-v2.soundcloud.com/tracks/{id}/related?limit=25"))?;
+        let list: Vec<Track> = v["collection"].as_array().map(|a| a.iter().filter_map(track).collect()).unwrap_or_default();
+        if list.is_empty() {
+            return Err("O SoundCloud não sugeriu nada parecido".into());
+        }
+        Ok(list)
     }
 
     /// Uma música pelo link (resolve também os encurtados on.soundcloud.com).
@@ -1031,6 +1055,56 @@ mod ytmusic {
             Value::Array(a) => a.iter().find_map(find_continuation),
             _ => None,
         }
+    }
+
+    /// Rádio do YouTube Music a partir de uma música ("RDAMVM…", o mesmo do botão
+    /// "Iniciar rádio" do site): devolve as próximas, sem a própria.
+    pub fn radio(video_id: &str) -> Result<Vec<Track>, String> {
+        let v = post(
+            "https://music.youtube.com/youtubei/v1/next?prettyPrint=false",
+            &json!({ "context": context(), "videoId": video_id, "playlistId": format!("RDAMVM{video_id}"), "isAudioOnly": true }),
+        )?;
+        let mut out = Vec::new();
+        let mut seen = HashSet::from([video_id.to_string()]);
+        collect_panel(&v, &mut out, &mut seen);
+        if out.is_empty() {
+            return Err("O YouTube Music não sugeriu nada parecido".into());
+        }
+        out.truncate(25);
+        Ok(out)
+    }
+
+    fn collect_panel(v: &Value, out: &mut Vec<Track>, seen: &mut HashSet<String>) {
+        match v {
+            Value::Object(m) => {
+                if let Some(it) = m.get("playlistPanelVideoRenderer") {
+                    if let Some(t) = panel_track(it) {
+                        if seen.insert(t.url.clone()) {
+                            out.push(t);
+                        }
+                    }
+                    return;
+                }
+                for c in m.values() {
+                    collect_panel(c, out, seen);
+                }
+            }
+            Value::Array(a) => a.iter().for_each(|c| collect_panel(c, out, seen)),
+            _ => {}
+        }
+    }
+
+    pub(super) fn panel_track(it: &Value) -> Option<Track> {
+        let id = it["videoId"].as_str()?;
+        let title = text_of(&it["title"]);
+        if title.is_empty() {
+            return None;
+        }
+        let by = runs(&it["longBylineText"]);
+        let artist = by.first().and_then(|r| r["text"].as_str()).unwrap_or("").to_string();
+        let cover = it["thumbnail"]["thumbnails"].as_array().and_then(|l| l.last()).and_then(|x| x["url"].as_str()).map(upscale);
+        let duration_ms = runs(&it["lengthText"]).first().and_then(|r| r["text"].as_str()).and_then(parse_duration);
+        Some(Track { title, artist, cover, url: format!("https://music.youtube.com/watch?v={id}"), duration_ms, rank: 1 })
     }
 
     /// Playlist do YouTube / YouTube Music pelo id (list=…), até 500 faixas.
@@ -1557,6 +1631,33 @@ mod tests {
         let v: Value = serde_json::from_str(&t).ok()?;
         v["collection"].as_array()?.iter().find(|p| p["track_count"].as_i64().unwrap_or(0) > 10)
             .and_then(|p| p["permalink_url"].as_str()).map(String::from)
+    }
+
+    #[test]
+    fn radio_le_item_da_lista_do_youtube_music() {
+        let it = serde_json::json!({
+            "videoId": "abcdefghijk",
+            "title": { "runs": [{ "text": "Lucid Dreams" }] },
+            "longBylineText": { "runs": [{ "text": "Juice WRLD" }, { "text": " • " }, { "text": "Goodbye & Good Riddance" }] },
+            "lengthText": { "runs": [{ "text": "3:59" }] },
+            "thumbnail": { "thumbnails": [{ "url": "https://lh3.googleusercontent.com/x=w60-h60" }] }
+        });
+        let t = ytmusic::panel_track(&it).unwrap();
+        assert_eq!((t.title.as_str(), t.artist.as_str(), t.duration_ms), ("Lucid Dreams", "Juice WRLD", Some(239_000)));
+        assert!(t.url.ends_with("abcdefghijk"));
+    }
+
+    #[test]
+    #[ignore = "usa a internet"]
+    fn ao_vivo_radio() {
+        let yt = radio("https://music.youtube.com/watch?v=mzB1VGEGcSU").unwrap_or_else(|e| panic!("rádio youtube: {e}"));
+        println!("Rádio YouTube Music: {} músicas, 1ª: {} — {}", yt.len(), yt[0].title, yt[0].artist);
+        assert!(yt.len() >= 5);
+        let pl = soundcloud_any_playlist().expect("sem playlist pra achar uma música");
+        let first = import_playlist(&pl).expect("playlist").tracks.remove(0);
+        let sc = radio(&first.url).unwrap_or_else(|e| panic!("rádio soundcloud: {e} ({})", first.url));
+        println!("Rádio SoundCloud: {} músicas, 1ª: {} — {}", sc.len(), sc[0].title, sc[0].artist);
+        assert!(!sc.is_empty());
     }
 
     #[test]

@@ -85,6 +85,14 @@ async fn search_page(service: String, query: String, kind: String, cursor: Optio
         .map_err(|e| e.to_string())?
 }
 
+/// Músicas parecidas pra continuar tocando quando a fila acaba.
+#[tauri::command]
+async fn radio_for(url: String) -> Result<Vec<search::Track>, String> {
+    tauri::async_runtime::spawn_blocking(move || search::radio(&url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Música pelo link (YouTube/SoundCloud) pra tocar na hora.
 #[tauri::command]
 async fn track_from_link(url: String) -> Result<search::LinkedTrack, String> {
@@ -575,6 +583,7 @@ fn main() {
             import_playlist,
             soundcloud_profile,
             track_from_link,
+            radio_for,
             yt_login_start,
             yt_login_poll,
             yt_status,
