@@ -27,6 +27,7 @@ export function initSettings(app) {
     $("#swDropFx").classList.toggle("on", settings.dropFx);
     document.body.classList.toggle("no-visualizer", !app.vizOn());
     $("#swDiscordSpotify").classList.toggle("on", settings.discordSpotify);
+    $("#swAutoRadio").classList.toggle("on", settings.autoRadio !== false);
     $("#swDiscordJoin").classList.toggle("on", settings.discordJoin !== false);
     $("#segBrowser").innerHTML = ["soundcloud", "ytmusic", "youtube"]
       .map((id) => `<button data-v="${id}" class="${id === settings.browserService ? "sel" : ""}">${esc(SERVICES[id].name)}</button>`)
@@ -206,6 +207,12 @@ export function initSettings(app) {
     settings.clockStyle = b.dataset.v;
     saveSettings();
     renderSettings();
+  });
+  $("#swAutoRadio").addEventListener("click", () => {
+    settings.autoRadio = settings.autoRadio === false;
+    saveSettings();
+    renderSettings();
+    toast(settings.autoRadio ? "Quando a fila acabar, continua com músicas parecidas 📻" : "Rádio automática desligada: a música para no fim da fila");
   });
   $("#segFit").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-v]");

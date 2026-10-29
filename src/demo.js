@@ -178,6 +178,10 @@ export function createDemoApi() {
             next: page < 3 ? String(page + 1) : null,
           };
         }
+        case "radio_for": {
+          await new Promise((r) => setTimeout(r, 400));
+          return TRACKS.map((t, i) => ({ title: `${t.title} (rádio ${i + 1})`, artist: t.artist, cover: t.thumb, url: `https://soundcloud.com/demo/radio-${i}`, durationMs: t.durationMs }));
+        }
         case "track_from_link": {
           await new Promise((r) => setTimeout(r, 500));
           const yt = /youtu/.test(args.url);

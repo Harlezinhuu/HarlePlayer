@@ -328,7 +328,15 @@ export function initLibrary(app) {
     if (li.dataset.qi) return player?.queue.jump(+li.dataset.qi);
     if (li.dataset.hk) {
       const h = app.history.find((x) => x.key === li.dataset.hk);
-      return h && playItem(h);
+      if (!h) return;
+      if (!player) return playItem(h);
+      // a lista dos Recentes vira a fila (antes era uma música só e o "próxima" não fazia nada)
+      const curKey = app.keyOf(app.media);
+      const items = app.history.filter((x) => x.key !== curKey).slice(0, 20);
+      const start = Math.max(0, items.indexOf(h));
+      const svc = PLAYABLE[settings.service] ? settings.service : "ytmusic";
+      const tracks = items.map((x) => x.play || { title: x.title, artist: x.artist || "", cover: x.thumb || null, url: null, service: svc, durationMs: 0 });
+      return player.playQueue(tracks, start);
     }
     if (li.dataset.pl) {
       openPlaylistId = li.dataset.pl;

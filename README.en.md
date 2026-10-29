@@ -28,6 +28,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
 - **Works with any music app.** It reads what's playing through the Windows media system, with no login and no API key. Spotify keeps playing in Spotify (so it still counts toward your Wrapped), and Harle Player just shows and controls it.
 - **Plays SoundCloud and YouTube Music inside the app**, no browser needed. SoundCloud audio is downloaded and played here. YouTube plays through the official player, hidden, and when a video is blocked the audio comes through [yt-dlp](https://github.com/yt-dlp/yt-dlp), downloaded and kept up to date automatically.
 - **Spotify-style queue**: *Play next* and *Add to queue* from the **⋯** menu or right-click, drag to reorder, shuffle, repeat (queue or one song) and clear.
+- **Auto radio**: when the queue ends, it keeps going with songs similar to the last one (YouTube Music's radio and SoundCloud's related tracks), like Spotify's autoplay. Can be turned off.
 - **Playlists**: create, rename, reorder and play in order or shuffled, with songs from SoundCloud and YouTube Music.
 - **Your SoundCloud and YouTube likes and playlists** (the person icon in the Playlists tab), always up to date:
   - **SoundCloud**: just paste your profile link. No password, since that's public there.

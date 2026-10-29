@@ -206,6 +206,7 @@ const player = IS_WALLPAPER
       api,
       toast,
       resolve: (t) => libraryUi.resolveTrack(t),
+      onRunOut: radioFor,
       onQueue: () => libraryUi.renderQueue(),
       onState: (st) => {
         local = st.available ? st : null;
@@ -215,6 +216,26 @@ const player = IS_WALLPAPER
     });
 
 player?.setVolume(settings.volume);
+
+/** Fila acabou: "rádio" com músicas parecidas com a última (autoplay, igual o Spotify). */
+async function radioFor(last, auto) {
+  if (settings.autoRadio === false) {
+    if (!auto) toast("Fim da fila (a rádio automática está desligada nas configurações)", 3000);
+    return null;
+  }
+  if (!last?.url) return null;
+  if (!auto) toast("Fim da fila: procurando músicas parecidas…", 2500);
+  try {
+    const list = await api.invoke("radio_for", { url: last.url });
+    const svc = last.service === "soundcloud" ? "soundcloud" : last.service === "youtube" ? "youtube" : "ytmusic";
+    const tracks = (list || []).map((t) => ({ ...toTrack(t, svc), radio: true }));
+    if (tracks.length) toast(`Rádio: ${tracks.length} músicas parecidas com "${last.title}" 📻`, 3000);
+    return tracks;
+  } catch (e) {
+    if (!auto) toast(`Não achei músicas parecidas: ${e?.message || e}`, 4000);
+    return null;
+  }
+}
 
 function toTrack(t, service) {
   const url = service === "youtube" && t.url ? t.url.replace("://music.youtube.com/", "://www.youtube.com/") : t.url;

@@ -26,6 +26,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
 - **Funciona com qualquer app de música.** Lê o que está tocando pelo sistema de mídia do Windows, sem login e sem chave de API. O Spotify continua tocando no próprio Spotify (contando pro Wrapped), e o Harle Player só mostra e controla.
 - **Toca SoundCloud e YouTube Music dentro do app**, sem abrir navegador. O áudio do SoundCloud é baixado e tocado aqui. O YouTube toca pelo player oficial, escondido, e se o vídeo bloquear, o áudio vem pelo [yt-dlp](https://github.com/yt-dlp/yt-dlp), baixado e atualizado sozinho.
 - **Fila no estilo Spotify**: *Tocar a seguir* e *Adicionar à fila* pelo menu **⋯** ou pelo clique direito, arrastar pra reordenar, embaralhar, repetir (a fila ou uma música) e limpar.
+- **Rádio automática**: quando a fila acaba, continua com músicas parecidas com a última (o mesmo "rádio" do YouTube Music e as relacionadas do SoundCloud), igual o autoplay do Spotify. Dá pra desligar.
 - **Playlists**: crie, renomeie, reordene e toque em ordem ou embaralhado, com músicas do SoundCloud e do YouTube Music.
 - **Suas curtidas e playlists do SoundCloud e do YouTube** (ícone de pessoa, na aba Playlists), sempre atualizadas:
   - **SoundCloud**: é só colar o link do seu perfil. Sem senha, porque lá isso é público.

@@ -38,7 +38,7 @@ export function eqPreamp(gains) {
   return Math.pow(10, (-boost * 0.6) / 20);
 }
 
-export function createPlayer({ api, onState, onQueue = () => {}, resolve = null, toast, ytHostId = "ytHost" }) {
+export function createPlayer({ api, onState, onQueue = () => {}, resolve = null, toast, ytHostId = "ytHost", onRunOut = null }) {
   const audio = new Audio();
   audio.preload = "auto";
 
@@ -96,7 +96,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
       thumb: cur?.cover || null,
       coverUrl: cur?.cover || null,
       link: cur?.url || null,
-      hasNext: Q.nextIndex(q(), repeat) >= 0,
+      hasNext: Q.nextIndex(q(), repeat) >= 0 || !!onRunOut,
     };
   }
   const emit = () => {
@@ -321,14 +321,41 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     if (my === seq) emit();
   }
 
+  // A fila acabou: pede músicas parecidas (rádio), emenda no fim e continua.
+  let extending = false;
+  async function extend(auto) {
+    if (extending || !onRunOut || !cur) return false;
+    extending = true;
+    const my = seq;
+    try {
+      const more = await onRunOut(cur, auto);
+      if (my !== seq || !more?.length) return false;
+      const have = new Set(queue.map((t) => t.url));
+      const fresh = more.filter((t) => t.url && !have.has(t.url)).map((t) => Q.withQid(t));
+      if (!fresh.length) return false;
+      setQ({ tracks: [...queue, ...fresh], index });
+      onQueue(queueInfo());
+      playIndex(index + 1);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      extending = false;
+    }
+  }
+
   function next(auto = false) {
     const n = Q.nextIndex(q(), repeat, auto);
     if (n === index && auto) return seek(0), toggleOn();
     if (n >= 0) return playIndex(n);
-    if (auto) {
-      loading = false;
-      emit();
-    }
+    // fim da fila (repetir desligado): continua com músicas parecidas
+    extend(auto).then((ok) => {
+      if (ok) return;
+      if (auto) {
+        loading = false;
+        emit();
+      }
+    });
   }
 
   function prev() {
