@@ -33,6 +33,7 @@ Funciona com Spotify, YouTube Music, SoundCloud, Apple Music, Deezer e o que mai
   - **YouTube / YouTube Music**: login pelo código, igual Smart TV (você autoriza em google.com/device, no seu navegador). O app nunca vê sua senha, só ganha permissão de **leitura**, e a chave fica criptografada pelo Windows no seu PC. Dá pra sair quando quiser, e o app avisa o Google.
 - **Importar playlist pelo link** (ou colando o link na busca): **Spotify**, **SoundCloud** e **YouTube / YouTube Music**, sem login. As do Spotify abrem no app do Spotify com um clique, então **contam pro Wrapped**. As do SoundCloud e do YouTube tocam aqui dentro.
 - **Equalizador de 10 faixas** no player interno, com presets (Grave+, Vocal, Rock, Eletrônica…) ou do seu jeito.
+- **Nível do volume** igual ao do Spotify: Baixo, Normal ou Alto (deixa a música mais alta sem estourar).
 - **Volume**: do player interno, ou só do app que está tocando (o Spotify, por exemplo), pelo mixer do Windows, sem mexer no volume do PC inteiro.
 - **Aleatório e repetir** na barra, igual o Spotify: no player interno e também no app de origem, quando ele deixa (o Windows avisa se o app aceita).
 - Teclas de mídia, tocar/pausar, próxima, anterior e barra de progresso clicável.

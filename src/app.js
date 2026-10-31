@@ -216,6 +216,7 @@ const player = IS_WALLPAPER
     });
 
 player?.setVolume(settings.volume);
+player?.setLoudness(settings.volumeLevel || "normal");
 
 /** Fila acabou: "rádio" com músicas parecidas com a última (autoplay, igual o Spotify). */
 async function radioFor(last, auto) {

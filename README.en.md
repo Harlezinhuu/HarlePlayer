@@ -35,6 +35,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
   - **YouTube / YouTube Music**: TV-style code login (you authorize at google.com/device, in your own browser). The app never sees your password, only gets **read-only** access, and the key is stored encrypted by Windows on your PC. You can sign out anytime, and the app tells Google.
 - **Import a playlist by link** (or by pasting the link into search): **Spotify**, **SoundCloud** and **YouTube / YouTube Music**, no login. Spotify playlists open in the Spotify app with one click, so they **count toward Wrapped**. SoundCloud and YouTube ones play right here.
 - **10-band equalizer** on the built-in player, with presets (Bass+, Vocal, Rock, Electronic…) or your own.
+- **Volume level** like Spotify: Quiet, Normal or Loud (makes music louder without clipping).
 - **Volume**: of the built-in player, or only of the app that's playing (Spotify, for example) through the Windows mixer, without touching the whole PC's volume.
 - **Shuffle and repeat** on the bar, like Spotify: on the built-in player and on the source app too, when it allows it (Windows reports whether the app supports it).
 - Media keys, play/pause, next, previous and a clickable progress bar.

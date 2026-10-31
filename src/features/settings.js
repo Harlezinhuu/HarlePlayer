@@ -28,6 +28,7 @@ export function initSettings(app) {
     document.body.classList.toggle("no-visualizer", !app.vizOn());
     $("#swDiscordSpotify").classList.toggle("on", settings.discordSpotify);
     $("#swAutoRadio").classList.toggle("on", settings.autoRadio !== false);
+    $$("#segLoud button").forEach((b) => b.classList.toggle("sel", b.dataset.v === (settings.volumeLevel || "normal")));
     $("#swDiscordJoin").classList.toggle("on", settings.discordJoin !== false);
     $("#segBrowser").innerHTML = ["soundcloud", "ytmusic", "youtube"]
       .map((id) => `<button data-v="${id}" class="${id === settings.browserService ? "sel" : ""}">${esc(SERVICES[id].name)}</button>`)
@@ -207,6 +208,16 @@ export function initSettings(app) {
     settings.clockStyle = b.dataset.v;
     saveSettings();
     renderSettings();
+  });
+  $("#segLoud").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]");
+    if (!b) return;
+    settings.volumeLevel = b.dataset.v;
+    saveSettings();
+    renderSettings();
+    player?.setLoudness(settings.volumeLevel);
+    const msg = { alto: "Volume Alto: mais forte, com limitador pra não estourar 🔊", baixo: "Volume Baixo: mais suave e igual entre as músicas", normal: "Volume Normal: a música do jeito que ela é" };
+    toast(msg[settings.volumeLevel], 2500);
   });
   $("#swAutoRadio").addEventListener("click", () => {
     settings.autoRadio = settings.autoRadio === false;

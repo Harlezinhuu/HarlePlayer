@@ -107,6 +107,9 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   // ---------- equalizador (WebAudio): <audio> → 10 filtros → volume → saída ----------
   let actx = null, gainNode = null, filters = [];
   let eqOn = false, eqGains = EQ_FREQS.map(() => 0);
+  // nível do volume (igual o Spotify): "baixo" | "normal" | "alto"
+  let loudness = "normal";
+  let comp = null, makeup = null, limiter = null;
   let duck = 1; // abaixado (Discord falando, DJ) — 1 = normal
   // karaokê: caminho "seco" (música normal) e caminho sem a voz do centro
   let dryGain = null, kGain = null;
@@ -156,7 +159,15 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
         node.connect(f);
         node = f;
       }
-      node.connect(gainNode);
+      // nível do volume: compressor + ganho de compensação + limitador (não deixa estourar)
+      comp = actx.createDynamicsCompressor();
+      makeup = actx.createGain();
+      limiter = actx.createDynamicsCompressor();
+      node.connect(comp);
+      comp.connect(makeup);
+      makeup.connect(limiter);
+      limiter.connect(gainNode);
+      applyLoudness();
       gainNode.connect(actx.destination);
       applyEq();
     } catch (e) {
@@ -164,6 +175,65 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
       actx = null;
     }
   }
+  /** Ajusta compressor/ganho/limitador pro nível escolhido. */
+  function applyLoudness() {
+    if (!comp) return;
+    const set = (c, o) => {
+      c.threshold.value = o.threshold;
+      c.knee.value = o.knee;
+      c.ratio.value = o.ratio;
+      c.attack.value = o.attack;
+      c.release.value = o.release;
+    };
+    const neutral = { threshold: 0, knee: 0, ratio: 1, attack: 0.003, release: 0.25 };
+    if (loudness === "alto") {
+      // comprime o que passa de -24 dB e sobe ~+6 dB; o limitador segura os picos
+      set(comp, { threshold: -24, knee: 12, ratio: 4, attack: 0.005, release: 0.25 });
+      makeup.gain.value = 1.8;
+      set(limiter, { threshold: -3, knee: 0, ratio: 20, attack: 0.001, release: 0.1 });
+    } else if (loudness === "baixo") {
+      // mais baixo e mais "igual" entre músicas (bom pra fundo/ambiente calmo)
+      set(comp, { threshold: -30, knee: 10, ratio: 2.5, attack: 0.01, release: 0.3 });
+      makeup.gain.value = 0.5; // o compressor do navegador já compensa um pouco sozinho
+      set(limiter, { threshold: -1, knee: 0, ratio: 20, attack: 0.001, release: 0.1 });
+    } else {
+      set(comp, neutral);
+      makeup.gain.value = 1;
+      set(limiter, neutral);
+    }
+  }
+
+  /** YouTube toca no player escondido do site, que não passa pelo nosso áudio:
+   *  equalizador, nível do volume e karaokê precisam do áudio baixado. */
+  const needsGraph = () => karaoke || eqOn || loudness !== "normal";
+  async function ensureAudioEngine(why) {
+    if (!needsGraph() || engine !== "yt" || !cur) return;
+    const at = state().positionMs;
+    const wasPlaying = state().playing;
+    const my = ++seq;
+    loading = true;
+    stopEngines();
+    emit();
+    try {
+      await playDownloaded("youtube_audio", cur, my);
+      if (my === seq) {
+        audio.currentTime = at / 1000;
+        if (!wasPlaying) audio.pause();
+      }
+    } catch (e) {
+      loading = false;
+      toast(`Não deu pra preparar ${why}: ${e?.message || e}`, 4500);
+    }
+    if (my === seq) emit();
+  }
+
+  function setLoudness(level) {
+    loudness = ["baixo", "alto"].includes(level) ? level : "normal";
+    if (loudness !== "normal") ensureGraph();
+    applyLoudness();
+    ensureAudioEngine("o nível do volume");
+  }
+
   function applyEq() {
     if (actx) {
       filters.forEach((f, i) => (f.gain.value = eqOn ? eqGains[i] || 0 : 0));
@@ -298,7 +368,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
         onQueue(queueInfo());
       }
       if (cur.service === "soundcloud") await playDownloaded("soundcloud_audio", cur, my);
-      else if ((cur.service === "ytmusic" || cur.service === "youtube") && karaoke) {
+      else if ((cur.service === "ytmusic" || cur.service === "youtube") && needsGraph()) {
         // karaokê precisa do áudio "na mão" (o player do YouTube não deixa mexer no som)
         await playDownloaded("youtube_audio", cur, my);
       }
@@ -487,6 +557,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     if (gains) eqGains = gains.slice(0, EQ_FREQS.length);
     if (eqOn) ensureGraph();
     applyEq();
+    ensureAudioEngine("o equalizador");
   }
 
   /** Abaixa (0–1) por cima do volume escolhido; 1 = normal. */
@@ -503,21 +574,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     if (karaoke) ensureGraph();
     applyEq();
     // tocando pelo player do YouTube: troca pro áudio baixado, no mesmo ponto
-    if (karaoke && !was && engine === "yt" && cur) {
-      const at = state().positionMs;
-      const my = ++seq;
-      loading = true;
-      stopEngines();
-      emit();
-      try {
-        await playDownloaded("youtube_audio", cur, my);
-        if (my === seq) audio.currentTime = at / 1000;
-      } catch (e) {
-        loading = false;
-        toast(`Não deu pra preparar o karaokê: ${e?.message || e}`, 4500);
-      }
-      if (my === seq) emit();
-    }
+    if (karaoke && !was) await ensureAudioEngine("o karaokê");
   }
 
   /** Pro karaokê gravar e ligar o microfone no mesmo "mixer". */
@@ -526,5 +583,5 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     return actx ? { ctx: actx, out: gainNode, engine } : null;
   }
 
-  return { playQueue, queue: queueApi, setVolume, setEq, setDuck, setKaraoke, audioGraph, toggle, next: () => next(), prev, seek, stop, state, get active() { return !!cur; } };
+  return { playQueue, queue: queueApi, setVolume, setEq, setLoudness, setDuck, setKaraoke, audioGraph, toggle, next: () => next(), prev, seek, stop, state, get active() { return !!cur; } };
 }
