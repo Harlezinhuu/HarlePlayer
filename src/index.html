@@ -403,7 +403,10 @@
         <button class="switch" id="swRemote" role="switch"></button>
       </div>
       <div id="remoteBox" class="remote-box" hidden>
-        <canvas id="remoteQr" width="10" height="10"></canvas>
+        <div class="remote-qr">
+          <canvas id="remoteQr" width="10" height="10"></canvas>
+          <button class="btn" id="remoteReveal">Mostrar código</button>
+        </div>
         <div>
           <p>Aponte a câmera do celular pro código. Abre um controle no navegador, sem instalar nada.</p>
           <p class="muted" id="remoteUrl"></p>

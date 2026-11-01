@@ -47,6 +47,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   let cur = null; // { title, artist, cover, url, service, durationMs }
   let engine = null; // "audio" | "yt"
   let loading = false;
+  let wantPlay = null; // play/pause apertado enquanto troca de motor (null = sem troca)
   let seq = 0;
   let objectUrl = null;
   let volume = 1;
@@ -209,22 +210,30 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   async function ensureAudioEngine(why) {
     if (!needsGraph() || engine !== "yt" || !cur) return;
     const at = state().positionMs;
-    const wasPlaying = state().playing;
+    wantPlay = state().playing;
     const my = ++seq;
     loading = true;
     stopEngines();
+    // sai do YouTube JÁ: se a pessoa der play durante o download, o player do
+    // site não pode voltar a tocar (senão, quando o áudio chega, tocam os dois)
+    engine = null;
     emit();
     try {
       await playDownloaded("youtube_audio", cur, my);
       if (my === seq) {
         audio.currentTime = at / 1000;
-        if (!wasPlaying) audio.pause();
+        if (!wantPlay) audio.pause();
       }
     } catch (e) {
-      loading = false;
-      toast(`Não deu pra preparar ${why}: ${e?.message || e}`, 4500);
+      if (my === seq) {
+        loading = false;
+        toast(`Não deu pra preparar ${why}: ${e?.message || e}`, 4500);
+      }
     }
-    if (my === seq) emit();
+    if (my === seq) {
+      wantPlay = null;
+      emit();
+    }
   }
 
   function setLoudness(level) {
@@ -265,6 +274,9 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(new Blob([bytes], { type: sniffAudioType(bytes) }));
     engine = "audio";
+    // garantia: nunca deixa o player do YouTube tocando junto
+    if (yt?.stopVideo) try { yt.stopVideo(); } catch {}
+    ytPlaying = false;
     ensureGraph();
     actx?.resume?.().catch(() => {});
     audio.src = objectUrl;
@@ -354,6 +366,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     if (i !== index) setQ(Q.markPlayed({ tracks: queue, index: i }, i));
     else setQ(q());
     loading = true;
+    wantPlay = null;
     stopEngines();
     engine = null;
     emit();
@@ -435,13 +448,15 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   }
 
   function toggleOn() {
-    if (engine === "audio") audio.play().catch(() => {});
+    if (wantPlay !== null && !engine) wantPlay = true;
+    else if (engine === "audio") audio.play().catch(() => {});
     else if (engine === "yt" && yt) yt.playVideo();
   }
 
   function toggle() {
     if (!cur) return;
-    if (engine === "audio") audio.paused ? audio.play() : audio.pause();
+    if (wantPlay !== null && !engine) wantPlay = !wantPlay; // ainda trocando: vale quando terminar
+    else if (engine === "audio") audio.paused ? audio.play() : audio.pause();
     else if (engine === "yt" && yt) ytPlaying ? yt.pauseVideo() : yt.playVideo();
     setTimeout(emit, 50);
   }
