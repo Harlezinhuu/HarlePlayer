@@ -200,6 +200,7 @@ function control(action, positionMs) {
 // ===================================================================
 const PLAYABLE = { soundcloud: true, ytmusic: true, youtube: true };
 let local = null; // estado do player interno enquanto ele tem música
+let internalBusy = false;
 const player = IS_WALLPAPER
   ? null
   : createPlayer({
@@ -210,6 +211,12 @@ const player = IS_WALLPAPER
       onQueue: () => libraryUi.renderQueue(),
       onState: (st) => {
         local = st.available ? st : null;
+        // tocando aqui dentro: o leitor do Windows pode ir mais devagar
+        const busy = !!(local && (local.playing || local.loading));
+        if (busy !== internalBusy) {
+          internalBusy = busy;
+          api.invoke("media_internal", { active: busy }).catch(() => {});
+        }
         if (local) onMedia(st, true);
         else api.invoke("get_media").then((x) => onMedia(x)).catch(() => {});
       },
