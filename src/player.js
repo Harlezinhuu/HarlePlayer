@@ -38,7 +38,7 @@ export function eqPreamp(gains) {
   return Math.pow(10, (-boost * 0.6) / 20);
 }
 
-export function createPlayer({ api, onState, onQueue = () => {}, resolve = null, toast, ytHostId = "ytHost", onRunOut = null }) {
+export function createPlayer({ api, onState, onQueue = () => {}, resolve = null, findAlternate = null, toast, ytHostId = "ytHost", onRunOut = null }) {
   const audio = new Audio();
   audio.preload = "auto";
 
@@ -68,10 +68,23 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   let yt = null;
   let ytReady = null;
   let ytPlaying = false;
-  // o player do YouTube recusou várias seguidas (ex.: erro 152/153 em todo vídeo):
-  // vai direto pelo modo alternativo até o app reabrir
-  let ytEmbedFails = 0;
-  const EMBED_GIVE_UP = 2;
+  // Erro 152/153 = o player do YouTube não funciona pra NENHUM vídeo (configuração);
+  // 101/150 = só aquele vídeo não deixa tocar fora do YouTube (clipe de gravadora).
+  let ytEmbedBroken = false;
+  // O YouTube pediu "confirme que não é robô" pro yt-dlp: insistir só piora o bloqueio.
+  let ytdlpPausedUntil = 0;
+  const YTDLP_PAUSE_MS = 15 * 60e3;
+  const ytdlpPaused = () => Date.now() < ytdlpPausedUntil;
+  /** Áudio pelo yt-dlp, respeitando a pausa depois da verificação de robô. */
+  async function viaYtdlp(track, my) {
+    if (ytdlpPaused()) throw new Error("o YouTube pediu verificação de robô pro modo alternativo; ele volta em alguns minutos");
+    try {
+      await playDownloaded("youtube_audio", track, my);
+    } catch (e) {
+      if (/rob[ôo]|Sign in/i.test(String(e?.message || e))) ytdlpPausedUntil = Date.now() + YTDLP_PAUSE_MS;
+      throw e;
+    }
+  }
   // várias seguidas sem conseguir tocar: para em vez de pular a fila inteira
   let playFails = 0;
   const STOP_AFTER = 3;
@@ -228,6 +241,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   const needsGraph = () => karaoke || eqOn || loudness !== "normal";
   async function ensureAudioEngine(why) {
     if (!needsGraph() || engine !== "yt" || !cur) return;
+    if (ytdlpPaused()) return toast(`${why[0].toUpperCase() + why.slice(1)} volta a valer pro YouTube em alguns minutos (o YouTube pediu verificação de robô)`, 4500);
     const at = state().positionMs;
     wantPlay = state().playing;
     const my = ++seq;
@@ -238,15 +252,25 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     engine = null;
     emit();
     try {
-      await playDownloaded("youtube_audio", cur, my);
+      await viaYtdlp(cur, my);
       if (my === seq) {
         audio.currentTime = at / 1000;
         if (!wantPlay) audio.pause();
       }
     } catch (e) {
       if (my === seq) {
-        loading = false;
-        toast(`Não deu pra preparar ${why}: ${e?.message || e}`, 4500);
+        toast(`Não deu pra aplicar ${why} nessa música (${e?.message || e}); continua tocando normal`, 5000);
+        // volta pro player do YouTube no mesmo ponto, sem deixar a música parada
+        try {
+          const resume = wantPlay;
+          await playYouTube(cur, my);
+          if (my === seq) {
+            yt.seekTo(at / 1000, true);
+            if (!resume) yt.pauseVideo();
+          }
+        } catch {
+          loading = false;
+        }
       }
     }
     if (my === seq) {
@@ -323,7 +347,6 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
               ytPlaying = e.data === 1;
               if (e.data === 1) {
                 loading = false;
-                ytEmbedFails = 0;
                 playFails = 0;
               }
               if (e.data === 0) return next(true);
@@ -354,21 +377,37 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     engine = null;
     loading = true;
     emit();
-    ytEmbedFails++;
-    toast(
-      ytEmbedFails >= EMBED_GIVE_UP
-        ? `O player do YouTube está recusando os vídeos (código ${code}); as próximas vão direto pelo modo alternativo.`
-        : `Esse vídeo bloqueia o player do YouTube (código ${code}), tocando pelo modo alternativo… (na 1ª vez demora: baixa o yt-dlp)`,
-      5000,
-    );
+    if (code === 152 || code === 153) ytEmbedBroken = true;
+    // 1) Clipe que não deixa tocar fora do YouTube: a versão de áudio oficial
+    //    (YouTube Music) quase sempre deixa, e não depende do yt-dlp.
+    if (!ytEmbedBroken && findAlternate && !cur.altTried) {
+      const alt = await findAlternate(cur).catch(() => null);
+      if (my !== seq) return;
+      const altId = alt?.url && youtubeId(alt.url);
+      if (altId && altId !== youtubeId(cur.url)) {
+        queue[index] = { ...cur, url: alt.url, altTried: true, cover: cur.cover || alt.cover };
+        cur = queue[index];
+        onQueue(queueInfo());
+        toast("Esse clipe não deixa tocar fora do YouTube, tocando a versão de áudio…", 3500);
+        try {
+          await playYouTube(cur, my);
+          return;
+        } catch {
+          if (my !== seq) return;
+        }
+      }
+    }
+    // 2) Modo alternativo (yt-dlp)
+    if (!ytdlpPaused()) toast(`Esse vídeo não toca no player do YouTube (código ${code}), tentando o modo alternativo…`, 4000);
     try {
-      await playDownloaded("youtube_audio", cur, my);
+      await viaYtdlp(cur, my);
       if (my === seq) emit();
     } catch (err) {
       if (my !== seq) return;
       if (failed(String(err?.message || err || code))) next(true);
     }
   }
+
 
   async function playYouTube(track, my) {
     const id = youtubeId(track.url);
@@ -409,9 +448,16 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
         onQueue(queueInfo());
       }
       if (cur.service === "soundcloud") await playDownloaded("soundcloud_audio", cur, my);
-      else if ((cur.service === "ytmusic" || cur.service === "youtube") && (needsGraph() || ytEmbedFails >= EMBED_GIVE_UP)) {
-        // karaokê precisa do áudio "na mão" (o player do YouTube não deixa mexer no som)
-        await playDownloaded("youtube_audio", cur, my);
+      else if ((cur.service === "ytmusic" || cur.service === "youtube") && (ytEmbedBroken || (needsGraph() && !ytdlpPaused()))) {
+        // equalizador/nível/karaokê precisam do áudio "na mão" (o player do YouTube
+        // não deixa mexer no som); se o yt-dlp falhar, toca normal pelo YouTube
+        try {
+          await viaYtdlp(cur, my);
+        } catch (e) {
+          if (my !== seq || ytEmbedBroken) throw e;
+          toast("Essa vai tocar sem o equalizador/nível do volume (o modo alternativo falhou)", 4000);
+          await playYouTube(cur, my);
+        }
       }
       else if (cur.service === "ytmusic" || cur.service === "youtube") {
         try {
@@ -419,7 +465,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
         } catch {
           // player do YouTube nem carregou → vai direto pelo yt-dlp
           if (my !== seq) return;
-          await playDownloaded("youtube_audio", cur, my);
+          await viaYtdlp(cur, my);
         }
       }
       else throw new Error("Esse serviço não toca dentro do app");

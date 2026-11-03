@@ -207,6 +207,7 @@ const player = IS_WALLPAPER
       api,
       toast,
       resolve: (t) => libraryUi.resolveTrack(t),
+      findAlternate: findYoutubeAlternate,
       onRunOut: radioFor,
       onQueue: () => libraryUi.renderQueue(),
       onState: (st) => {
@@ -243,6 +244,17 @@ async function radioFor(last, auto) {
     if (!auto) toast(`Não achei músicas parecidas: ${e?.message || e}`, 4000);
     return null;
   }
+}
+
+/** Outra versão da mesma música no YouTube Music (a de áudio oficial costuma
+ *  deixar tocar no player embutido, o clipe da gravadora não). */
+async function findYoutubeAlternate(t) {
+  if (!t.title) return null;
+  const vid = (u) => /[?&]v=([\w-]{11})|youtu\.be\/([\w-]{11})/.exec(u || "")?.slice(1).find(Boolean);
+  const res = await api.invoke("search_music", { service: "ytmusic", query: `${t.title} ${t.artist || ""}`.trim() });
+  const mine = vid(t.url);
+  const f = (res?.tracks || []).map((x) => toTrack(x, "ytmusic")).find((x) => vid(x.url) && vid(x.url) !== mine);
+  return f || null;
 }
 
 function toTrack(t, service) {
