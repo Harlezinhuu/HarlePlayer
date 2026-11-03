@@ -18,6 +18,7 @@ mod visualizer;
 mod volume;
 mod wallpaper;
 mod ytdlp;
+mod ytembed;
 mod ytauth;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
@@ -567,6 +568,9 @@ fn main() {
         })
         .setup(|app| {
             build_tray(app)?;
+            if let Some(w) = app.get_webview_window("main") {
+                ytembed::install(&w);
+            }
             media::start_watcher(app.handle().clone());
             discord::start();
             {

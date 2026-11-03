@@ -329,40 +329,122 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   }
 
   // ---------- YouTube (IFrame API) ----------
+  // No app (Windows), o player do YouTube roda dentro de yt-embed.html, servida
+  // pelo próprio app num endereço https (o YouTube recusa tauri.localhost com
+  // erro 152/153). Fora do app (demo no navegador) usa a API direto.
+  const EMBED_PAGE = "https://harlezinhuu.github.io/HarlePlayer/yt-embed.html";
+  const EMBED_ORIGIN = "https://harlezinhuu.github.io";
+  const useBridge = !!window.__TAURI__ && /Windows/i.test(navigator.userAgent);
+
+  function ytEvents(resolve) {
+    return {
+      onReady: () => {
+        yt.setVolume?.(Math.round(volume * volume * duck * 100));
+        resolve();
+      },
+      onStateChange: (e) => {
+        if (engine !== "yt") return;
+        ytPlaying = e.data === 1;
+        if (e.data === 1) {
+          loading = false;
+          playFails = 0;
+        }
+        if (e.data === 0) return next(true);
+        emit();
+      },
+      onError: (e) => youtubeFailed(e.data),
+    };
+  }
+
+  /** Mesmo jeitão do YT.Player, mas conversando com yt-embed.html por postMessage. */
+  function bridgePlayer(events, onFail) {
+    const host = document.getElementById(ytHostId);
+    const frame = document.createElement("iframe");
+    frame.src = EMBED_PAGE;
+    frame.width = frame.height = "200";
+    frame.allow = "autoplay; encrypted-media";
+    frame.style.border = "0";
+    host.appendChild(frame);
+    let t = 0, d = 0, ready = false;
+    const post = (m) => frame.contentWindow?.postMessage({ harleYt: 1, ...m }, EMBED_ORIGIN);
+    const hello = setInterval(() => post({ type: "hello" }), 300);
+    const onMsg = (e) => {
+      if (e.source !== frame.contentWindow || e.origin !== EMBED_ORIGIN) return;
+      const m = e.data;
+      if (!m || m.harleYt !== 1) return;
+      if (m.type === "ready") {
+        if (ready) return;
+        ready = true;
+        clearInterval(hello);
+        events.onReady();
+      } else if (m.type === "time") {
+        t = m.t;
+        d = m.d;
+      } else if (m.type === "state") events.onStateChange({ data: m.data });
+      else if (m.type === "error") events.onError({ data: m.data });
+      else if (m.type === "fail") onFail();
+    };
+    addEventListener("message", onMsg);
+    const cmd = (fn) => (...args) => post({ type: "cmd", fn, args });
+    return {
+      getCurrentTime: () => t,
+      getDuration: () => d,
+      loadVideoById: (id) => {
+        t = d = 0;
+        post({ type: "cmd", fn: "loadVideoById", args: [id] });
+      },
+      seekTo: (sec, ahead) => {
+        t = sec;
+        post({ type: "cmd", fn: "seekTo", args: [sec, ahead] });
+      },
+      playVideo: cmd("playVideo"),
+      pauseVideo: cmd("pauseVideo"),
+      stopVideo: cmd("stopVideo"),
+      setVolume: cmd("setVolume"),
+      destroy: () => {
+        clearInterval(hello);
+        removeEventListener("message", onMsg);
+        frame.remove();
+      },
+    };
+  }
+
   function loadYouTube() {
     if (ytReady) return ytReady;
     ytReady = new Promise((resolve, reject) => {
+      const fail = (msg) => {
+        ytReady = null;
+        reject(new Error(msg));
+      };
+      if (useBridge) {
+        const timer = setTimeout(() => {
+          yt?.destroy?.();
+          yt = null;
+          fail("O player do YouTube não carregou");
+        }, 12000);
+        yt = bridgePlayer(ytEvents(() => {
+          clearTimeout(timer);
+          resolve();
+        }), () => {
+          clearTimeout(timer);
+          yt?.destroy?.();
+          yt = null;
+          fail("Sem conexão com o YouTube");
+        });
+        return;
+      }
       const done = () =>
         (yt = new window.YT.Player(ytHostId, {
           width: 200,
           height: 200,
           playerVars: { autoplay: 1, controls: 0, playsinline: 1, rel: 0, origin: location.origin },
-          events: {
-            onReady: () => {
-              yt.setVolume?.(Math.round(volume * volume * duck * 100));
-              resolve();
-            },
-            onStateChange: (e) => {
-              if (engine !== "yt") return;
-              ytPlaying = e.data === 1;
-              if (e.data === 1) {
-                loading = false;
-                playFails = 0;
-              }
-              if (e.data === 0) return next(true);
-              emit();
-            },
-            onError: (e) => youtubeFailed(e.data),
-          },
+          events: ytEvents(resolve),
         }));
       if (window.YT?.Player) return done();
       window.onYouTubeIframeAPIReady = done;
       const s = document.createElement("script");
       s.src = "https://www.youtube.com/iframe_api";
-      s.onerror = () => {
-        ytReady = null;
-        reject(new Error("Sem conexão com o YouTube"));
-      };
+      s.onerror = () => fail("Sem conexão com o YouTube");
       document.head.appendChild(s);
     });
     return ytReady;
