@@ -68,6 +68,25 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   let yt = null;
   let ytReady = null;
   let ytPlaying = false;
+  // o player do YouTube recusou várias seguidas (ex.: erro 152/153 em todo vídeo):
+  // vai direto pelo modo alternativo até o app reabrir
+  let ytEmbedFails = 0;
+  const EMBED_GIVE_UP = 2;
+  // várias seguidas sem conseguir tocar: para em vez de pular a fila inteira
+  let playFails = 0;
+  const STOP_AFTER = 3;
+  function failed(msg) {
+    playFails++;
+    loading = false;
+    if (playFails >= STOP_AFTER) {
+      playFails = 0;
+      toast(`Parei: ${STOP_AFTER} músicas seguidas não tocaram. Último erro: ${msg}`, 9000);
+      emit();
+      return false;
+    }
+    toast(`Não deu pra tocar (${msg}), pulando…`, 4500);
+    return true;
+  }
 
   function state() {
     let playing = false, pos = 0, dur = cur?.durationMs || 0;
@@ -281,6 +300,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     actx?.resume?.().catch(() => {});
     audio.src = objectUrl;
     loading = false;
+    playFails = 0;
     await audio.play();
   }
 
@@ -301,7 +321,11 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
             onStateChange: (e) => {
               if (engine !== "yt") return;
               ytPlaying = e.data === 1;
-              if (e.data === 1) loading = false;
+              if (e.data === 1) {
+                loading = false;
+                ytEmbedFails = 0;
+                playFails = 0;
+              }
               if (e.data === 0) return next(true);
               emit();
             },
@@ -330,15 +354,19 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     engine = null;
     loading = true;
     emit();
-    toast("Esse vídeo bloqueia o player do YouTube, tocando pelo modo alternativo… (na 1ª vez demora um pouco)", 4500);
+    ytEmbedFails++;
+    toast(
+      ytEmbedFails >= EMBED_GIVE_UP
+        ? `O player do YouTube está recusando os vídeos (código ${code}); as próximas vão direto pelo modo alternativo.`
+        : `Esse vídeo bloqueia o player do YouTube (código ${code}), tocando pelo modo alternativo… (na 1ª vez demora: baixa o yt-dlp)`,
+      5000,
+    );
     try {
       await playDownloaded("youtube_audio", cur, my);
       if (my === seq) emit();
     } catch (err) {
       if (my !== seq) return;
-      loading = false;
-      toast(`Não deu pra tocar (${String(err?.message || err || code)}), pulando…`, 4500);
-      next(true);
+      if (failed(String(err?.message || err || code))) next(true);
     }
   }
 
@@ -381,7 +409,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
         onQueue(queueInfo());
       }
       if (cur.service === "soundcloud") await playDownloaded("soundcloud_audio", cur, my);
-      else if ((cur.service === "ytmusic" || cur.service === "youtube") && needsGraph()) {
+      else if ((cur.service === "ytmusic" || cur.service === "youtube") && (needsGraph() || ytEmbedFails >= EMBED_GIVE_UP)) {
         // karaokê precisa do áudio "na mão" (o player do YouTube não deixa mexer no som)
         await playDownloaded("youtube_audio", cur, my);
       }
@@ -397,9 +425,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
       else throw new Error("Esse serviço não toca dentro do app");
     } catch (e) {
       if (my !== seq) return;
-      loading = false;
-      toast(String(e?.message || e), 4000);
-      if (index + 1 < queue.length) return playIndex(index + 1);
+      if (failed(String(e?.message || e)) && index + 1 < queue.length) return playIndex(index + 1);
     }
     if (my === seq) emit();
   }

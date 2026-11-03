@@ -3,7 +3,13 @@
 //!
 //! O `yt-dlp.exe` é baixado do GitHub oficial do projeto na primeira vez que
 //! precisa e se atualiza sozinho uma vez por dia (o YouTube muda direto).
+//!
+//! Desde o fim de 2025 o yt-dlp precisa de um "motor de JavaScript" pra
+//! resolver o desafio do YouTube (sem ele, quase nenhum vídeo toca). O app
+//! baixa o Deno (o motor recomendado pelo yt-dlp) do GitHub oficial do Deno,
+//! uma vez só, na mesma pasta.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime};
@@ -17,6 +23,15 @@ const EXE_NAME: &str = "yt-dlp.exe";
 const DOWNLOAD_URL: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
 #[cfg(not(windows))]
 const EXE_NAME: &str = "yt-dlp";
+
+#[cfg(windows)]
+const DENO_URL: &str = "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip";
+#[cfg(windows)]
+const DENO_EXE: &str = "deno.exe";
+#[cfg(not(windows))]
+const DENO_URL: &str = "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip";
+#[cfg(not(windows))]
+const DENO_EXE: &str = "deno";
 
 const UPDATE_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -65,6 +80,58 @@ pub fn ensure_in(dir: &Path) -> Result<PathBuf, String> {
     Ok(exe)
 }
 
+/// Baixa direto pro disco (o Deno tem dezenas de MB, não cabe no limite de áudio).
+fn download_to(url: &str, dest: &Path) -> Result<(), String> {
+    let resp = ureq::get(url)
+        .set("User-Agent", "HarlePlayer")
+        .timeout(Duration::from_secs(600))
+        .call()
+        .map_err(|e| e.to_string())?;
+    let mut file = std::fs::File::create(dest).map_err(|e| e.to_string())?;
+    std::io::copy(&mut resp.into_reader().take(400 * 1024 * 1024), &mut file).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Garante o Deno na pasta `dir`. `None` se não deu (aí o yt-dlp tenta sem).
+pub fn ensure_deno(dir: &Path) -> Option<PathBuf> {
+    let exe = dir.join(DENO_EXE);
+    if exe.exists() {
+        return Some(exe);
+    }
+    std::fs::create_dir_all(dir).ok()?;
+    let zip = dir.join("deno.zip");
+    let ok = (|| -> Result<(), String> {
+        download_to(DENO_URL, &zip)?;
+        // o Windows 10/11 já vem com tar.exe, que abre .zip
+        let status = command(Path::new("tar"))
+            .arg("-xf")
+            .arg(&zip)
+            .arg("-C")
+            .arg(dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map_err(|e| e.to_string())?;
+        if !status.success() {
+            return Err("não consegui extrair o Deno".into());
+        }
+        Ok(())
+    })();
+    let _ = std::fs::remove_file(&zip);
+    match ok {
+        Ok(()) if exe.exists() => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755));
+            }
+            Some(exe)
+        }
+        _ => None,
+    }
+}
+
 fn bin_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("bin"))
 }
@@ -76,11 +143,15 @@ fn is_youtube(url: &str) -> bool {
 }
 
 /// Baixa só o áudio (m4a de preferência) e devolve os bytes.
-pub fn audio_with(exe: &Path, url: &str) -> Result<Vec<u8>, String> {
+pub fn audio_with(exe: &Path, deno: Option<&Path>, url: &str) -> Result<Vec<u8>, String> {
     if !is_youtube(url) {
         return Err("Link do YouTube inválido".into());
     }
-    let out = command(exe)
+    let mut cmd = command(exe);
+    if let Some(d) = deno {
+        cmd.arg("--js-runtimes").arg(format!("deno:{}", d.display()));
+    }
+    let out = cmd
         .args([
             "-f",
             "bestaudio[ext=m4a]/bestaudio[acodec=opus]/bestaudio",
@@ -104,6 +175,8 @@ pub fn audio_with(exe: &Path, url: &str) -> Result<Vec<u8>, String> {
         let err = String::from_utf8_lossy(&out.stderr);
         let msg = if err.contains("Sign in to confirm") {
             "O YouTube pediu verificação de robô; tente de novo daqui a pouco".to_string()
+        } else if err.contains("Requested format is not available") || err.contains("Only images are available") {
+            "O YouTube não liberou o áudio (falta o motor de JavaScript do yt-dlp?)".to_string()
         } else if err.contains("Video unavailable") || err.contains("Private video") {
             "Esse vídeo não está disponível".to_string()
         } else {
@@ -116,8 +189,10 @@ pub fn audio_with(exe: &Path, url: &str) -> Result<Vec<u8>, String> {
 }
 
 pub fn audio(app: &AppHandle, url: &str) -> Result<Vec<u8>, String> {
-    let exe = ensure_in(&bin_dir(app)?)?;
-    audio_with(&exe, url)
+    let dir = bin_dir(app)?;
+    let exe = ensure_in(&dir)?;
+    let deno = ensure_deno(&dir);
+    audio_with(&exe, deno.as_deref(), url)
 }
 
 #[cfg(test)]
@@ -129,7 +204,7 @@ mod tests {
         assert!(is_youtube("https://music.youtube.com/watch?v=abc"));
         assert!(is_youtube("https://youtu.be/abc"));
         assert!(!is_youtube("https://evil.com/?https://www.youtube.com/"));
-        assert!(audio_with(Path::new("nao-existe"), "file:///C:/x").is_err());
+        assert!(audio_with(Path::new("nao-existe"), None, "file:///C:/x").is_err());
     }
 
     /// Roda na mão: cargo test manual_ytdlp -- --ignored --nocapture
@@ -140,7 +215,9 @@ mod tests {
         let dir = std::env::temp_dir().join("harle-ytdlp-teste");
         let exe = ensure_in(&dir).expect("baixar yt-dlp");
         println!("yt-dlp em {}", exe.display());
-        match audio_with(&exe, "https://www.youtube.com/watch?v=jNQXAC9IVRw") {
+        let deno = ensure_deno(&dir);
+        println!("yt-dlp: deno {}", deno.as_ref().map_or("não baixou".into(), |d| d.display().to_string()));
+        match audio_with(&exe, deno.as_deref(), "https://www.youtube.com/watch?v=jNQXAC9IVRw") {
             Ok(b) => println!("yt-dlp: áudio de {} KB, começa com {:02X?}", b.len() / 1024, &b[..8]),
             Err(e) => panic!("yt-dlp falhou: {e}"),
         }
