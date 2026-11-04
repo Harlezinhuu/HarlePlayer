@@ -38,7 +38,7 @@ export function eqPreamp(gains) {
   return Math.pow(10, (-boost * 0.6) / 20);
 }
 
-export function createPlayer({ api, onState, onQueue = () => {}, resolve = null, toast, ytHostId = "ytHost", onRunOut = null }) {
+export function createPlayer({ api, onState, onQueue = () => {}, resolve = null, findAlternate = null, toast, ytHostId = "ytHost", onRunOut = null }) {
   const audio = new Audio();
   audio.preload = "auto";
 
@@ -47,6 +47,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   let cur = null; // { title, artist, cover, url, service, durationMs }
   let engine = null; // "audio" | "yt"
   let loading = false;
+  let wantPlay = null; // play/pause apertado enquanto troca de motor (null = sem troca)
   let seq = 0;
   let objectUrl = null;
   let volume = 1;
@@ -67,6 +68,38 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   let yt = null;
   let ytReady = null;
   let ytPlaying = false;
+  // Erro 152/153 = o player do YouTube não funciona pra NENHUM vídeo (configuração);
+  // 101/150 = só aquele vídeo não deixa tocar fora do YouTube (clipe de gravadora).
+  let ytEmbedBroken = false;
+  // O YouTube pediu "confirme que não é robô" pro yt-dlp: insistir só piora o bloqueio.
+  let ytdlpPausedUntil = 0;
+  const YTDLP_PAUSE_MS = 15 * 60e3;
+  const ytdlpPaused = () => Date.now() < ytdlpPausedUntil;
+  /** Áudio pelo yt-dlp, respeitando a pausa depois da verificação de robô. */
+  async function viaYtdlp(track, my) {
+    if (ytdlpPaused()) throw new Error("o YouTube pediu verificação de robô pro modo alternativo; ele volta em alguns minutos");
+    try {
+      await playDownloaded("youtube_audio", track, my);
+    } catch (e) {
+      if (/rob[ôo]|Sign in/i.test(String(e?.message || e))) ytdlpPausedUntil = Date.now() + YTDLP_PAUSE_MS;
+      throw e;
+    }
+  }
+  // várias seguidas sem conseguir tocar: para em vez de pular a fila inteira
+  let playFails = 0;
+  const STOP_AFTER = 3;
+  function failed(msg) {
+    playFails++;
+    loading = false;
+    if (playFails >= STOP_AFTER) {
+      playFails = 0;
+      toast(`Parei: ${STOP_AFTER} músicas seguidas não tocaram. Último erro: ${msg}`, 9000);
+      emit();
+      return false;
+    }
+    toast(`Não deu pra tocar (${msg}), pulando…`, 4500);
+    return true;
+  }
 
   function state() {
     let playing = false, pos = 0, dur = cur?.durationMs || 0;
@@ -208,23 +241,42 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   const needsGraph = () => karaoke || eqOn || loudness !== "normal";
   async function ensureAudioEngine(why) {
     if (!needsGraph() || engine !== "yt" || !cur) return;
+    if (ytdlpPaused()) return toast(`${why[0].toUpperCase() + why.slice(1)} volta a valer pro YouTube em alguns minutos (o YouTube pediu verificação de robô)`, 4500);
     const at = state().positionMs;
-    const wasPlaying = state().playing;
+    wantPlay = state().playing;
     const my = ++seq;
     loading = true;
     stopEngines();
+    // sai do YouTube JÁ: se a pessoa der play durante o download, o player do
+    // site não pode voltar a tocar (senão, quando o áudio chega, tocam os dois)
+    engine = null;
     emit();
     try {
-      await playDownloaded("youtube_audio", cur, my);
+      await viaYtdlp(cur, my);
       if (my === seq) {
         audio.currentTime = at / 1000;
-        if (!wasPlaying) audio.pause();
+        if (!wantPlay) audio.pause();
       }
     } catch (e) {
-      loading = false;
-      toast(`Não deu pra preparar ${why}: ${e?.message || e}`, 4500);
+      if (my === seq) {
+        toast(`Não deu pra aplicar ${why} nessa música (${e?.message || e}); continua tocando normal`, 5000);
+        // volta pro player do YouTube no mesmo ponto, sem deixar a música parada
+        try {
+          const resume = wantPlay;
+          await playYouTube(cur, my);
+          if (my === seq) {
+            yt.seekTo(at / 1000, true);
+            if (!resume) yt.pauseVideo();
+          }
+        } catch {
+          loading = false;
+        }
+      }
     }
-    if (my === seq) emit();
+    if (my === seq) {
+      wantPlay = null;
+      emit();
+    }
   }
 
   function setLoudness(level) {
@@ -265,45 +317,134 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(new Blob([bytes], { type: sniffAudioType(bytes) }));
     engine = "audio";
+    // garantia: nunca deixa o player do YouTube tocando junto
+    if (yt?.stopVideo) try { yt.stopVideo(); } catch {}
+    ytPlaying = false;
     ensureGraph();
     actx?.resume?.().catch(() => {});
     audio.src = objectUrl;
     loading = false;
+    playFails = 0;
     await audio.play();
   }
 
   // ---------- YouTube (IFrame API) ----------
+  // No app (Windows), o player do YouTube roda dentro de yt-embed.html, servida
+  // pelo próprio app num endereço https (o YouTube recusa tauri.localhost com
+  // erro 152/153). Fora do app (demo no navegador) usa a API direto.
+  const EMBED_PAGE = "https://harlezinhuu.github.io/HarlePlayer/yt-embed.html";
+  const EMBED_ORIGIN = "https://harlezinhuu.github.io";
+  const useBridge = !!window.__TAURI__ && /Windows/i.test(navigator.userAgent);
+
+  function ytEvents(resolve) {
+    return {
+      onReady: () => {
+        yt.setVolume?.(Math.round(volume * volume * duck * 100));
+        resolve();
+      },
+      onStateChange: (e) => {
+        if (engine !== "yt") return;
+        ytPlaying = e.data === 1;
+        if (e.data === 1) {
+          loading = false;
+          playFails = 0;
+        }
+        if (e.data === 0) return next(true);
+        emit();
+      },
+      onError: (e) => youtubeFailed(e.data),
+    };
+  }
+
+  /** Mesmo jeitão do YT.Player, mas conversando com yt-embed.html por postMessage. */
+  function bridgePlayer(events, onFail) {
+    const host = document.getElementById(ytHostId);
+    const frame = document.createElement("iframe");
+    frame.src = EMBED_PAGE;
+    frame.width = frame.height = "200";
+    frame.allow = "autoplay; encrypted-media";
+    frame.style.border = "0";
+    host.appendChild(frame);
+    let t = 0, d = 0, ready = false;
+    const post = (m) => frame.contentWindow?.postMessage({ harleYt: 1, ...m }, EMBED_ORIGIN);
+    const hello = setInterval(() => post({ type: "hello" }), 300);
+    const onMsg = (e) => {
+      if (e.source !== frame.contentWindow || e.origin !== EMBED_ORIGIN) return;
+      const m = e.data;
+      if (!m || m.harleYt !== 1) return;
+      if (m.type === "ready") {
+        if (ready) return;
+        ready = true;
+        clearInterval(hello);
+        events.onReady();
+      } else if (m.type === "time") {
+        t = m.t;
+        d = m.d;
+      } else if (m.type === "state") events.onStateChange({ data: m.data });
+      else if (m.type === "error") events.onError({ data: m.data });
+      else if (m.type === "fail") onFail();
+    };
+    addEventListener("message", onMsg);
+    const cmd = (fn) => (...args) => post({ type: "cmd", fn, args });
+    return {
+      getCurrentTime: () => t,
+      getDuration: () => d,
+      loadVideoById: (id) => {
+        t = d = 0;
+        post({ type: "cmd", fn: "loadVideoById", args: [id] });
+      },
+      seekTo: (sec, ahead) => {
+        t = sec;
+        post({ type: "cmd", fn: "seekTo", args: [sec, ahead] });
+      },
+      playVideo: cmd("playVideo"),
+      pauseVideo: cmd("pauseVideo"),
+      stopVideo: cmd("stopVideo"),
+      setVolume: cmd("setVolume"),
+      destroy: () => {
+        clearInterval(hello);
+        removeEventListener("message", onMsg);
+        frame.remove();
+      },
+    };
+  }
+
   function loadYouTube() {
     if (ytReady) return ytReady;
     ytReady = new Promise((resolve, reject) => {
+      const fail = (msg) => {
+        ytReady = null;
+        reject(new Error(msg));
+      };
+      if (useBridge) {
+        const timer = setTimeout(() => {
+          yt?.destroy?.();
+          yt = null;
+          fail("O player do YouTube não carregou");
+        }, 12000);
+        yt = bridgePlayer(ytEvents(() => {
+          clearTimeout(timer);
+          resolve();
+        }), () => {
+          clearTimeout(timer);
+          yt?.destroy?.();
+          yt = null;
+          fail("Sem conexão com o YouTube");
+        });
+        return;
+      }
       const done = () =>
         (yt = new window.YT.Player(ytHostId, {
           width: 200,
           height: 200,
           playerVars: { autoplay: 1, controls: 0, playsinline: 1, rel: 0, origin: location.origin },
-          events: {
-            onReady: () => {
-              yt.setVolume?.(Math.round(volume * volume * duck * 100));
-              resolve();
-            },
-            onStateChange: (e) => {
-              if (engine !== "yt") return;
-              ytPlaying = e.data === 1;
-              if (e.data === 1) loading = false;
-              if (e.data === 0) return next(true);
-              emit();
-            },
-            onError: (e) => youtubeFailed(e.data),
-          },
+          events: ytEvents(resolve),
         }));
       if (window.YT?.Player) return done();
       window.onYouTubeIframeAPIReady = done;
       const s = document.createElement("script");
       s.src = "https://www.youtube.com/iframe_api";
-      s.onerror = () => {
-        ytReady = null;
-        reject(new Error("Sem conexão com o YouTube"));
-      };
+      s.onerror = () => fail("Sem conexão com o YouTube");
       document.head.appendChild(s);
     });
     return ytReady;
@@ -318,17 +459,41 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     engine = null;
     loading = true;
     emit();
-    toast("Esse vídeo bloqueia o player do YouTube, tocando pelo modo alternativo… (na 1ª vez demora um pouco)", 4500);
+    if (code === 152 || code === 153) ytEmbedBroken = true;
+    // 1) Vídeo que não deixa tocar fora do YouTube (clipe de gravadora): tenta outras
+    //    versões da mesma música (áudio oficial, vídeo com letra…), sem yt-dlp.
+    if (!ytEmbedBroken && findAlternate) {
+      if (!cur.alts) {
+        const list = await findAlternate(cur).catch(() => []);
+        if (my !== seq) return;
+        queue[index] = { ...cur, alts: Array.isArray(list) ? list : list ? [list] : [], altIdx: 0, origUrl: cur.origUrl || cur.url };
+        cur = queue[index];
+      }
+      const alt = cur.alts[cur.altIdx];
+      if (alt?.url) {
+        queue[index] = { ...cur, url: alt.url, altIdx: cur.altIdx + 1, cover: cur.cover || alt.cover };
+        cur = queue[index];
+        onQueue(queueInfo());
+        if (cur.altIdx === 1) toast("Essa versão não deixa tocar fora do YouTube, procurando outra…", 3500);
+        try {
+          await playYouTube(cur, my);
+          return;
+        } catch {
+          if (my !== seq) return;
+        }
+      }
+    }
+    // 2) Modo alternativo (yt-dlp)
+    if (!ytdlpPaused()) toast(`Esse vídeo não toca no player do YouTube (código ${code}), tentando o modo alternativo…`, 4000);
     try {
-      await playDownloaded("youtube_audio", cur, my);
+      await viaYtdlp(cur, my);
       if (my === seq) emit();
     } catch (err) {
       if (my !== seq) return;
-      loading = false;
-      toast(`Não deu pra tocar (${String(err?.message || err || code)}), pulando…`, 4500);
-      next(true);
+      if (failed(String(err?.message || err || code))) next(true);
     }
   }
+
 
   async function playYouTube(track, my) {
     const id = youtubeId(track.url);
@@ -354,6 +519,7 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     if (i !== index) setQ(Q.markPlayed({ tracks: queue, index: i }, i));
     else setQ(q());
     loading = true;
+    wantPlay = null;
     stopEngines();
     engine = null;
     emit();
@@ -368,9 +534,16 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
         onQueue(queueInfo());
       }
       if (cur.service === "soundcloud") await playDownloaded("soundcloud_audio", cur, my);
-      else if ((cur.service === "ytmusic" || cur.service === "youtube") && needsGraph()) {
-        // karaokê precisa do áudio "na mão" (o player do YouTube não deixa mexer no som)
-        await playDownloaded("youtube_audio", cur, my);
+      else if ((cur.service === "ytmusic" || cur.service === "youtube") && (ytEmbedBroken || (needsGraph() && !ytdlpPaused()))) {
+        // equalizador/nível/karaokê precisam do áudio "na mão" (o player do YouTube
+        // não deixa mexer no som); se o yt-dlp falhar, toca normal pelo YouTube
+        try {
+          await viaYtdlp(cur, my);
+        } catch (e) {
+          if (my !== seq || ytEmbedBroken) throw e;
+          toast("Essa vai tocar sem o equalizador/nível do volume (o modo alternativo falhou)", 4000);
+          await playYouTube(cur, my);
+        }
       }
       else if (cur.service === "ytmusic" || cur.service === "youtube") {
         try {
@@ -378,15 +551,13 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
         } catch {
           // player do YouTube nem carregou → vai direto pelo yt-dlp
           if (my !== seq) return;
-          await playDownloaded("youtube_audio", cur, my);
+          await viaYtdlp(cur, my);
         }
       }
       else throw new Error("Esse serviço não toca dentro do app");
     } catch (e) {
       if (my !== seq) return;
-      loading = false;
-      toast(String(e?.message || e), 4000);
-      if (index + 1 < queue.length) return playIndex(index + 1);
+      if (failed(String(e?.message || e)) && index + 1 < queue.length) return playIndex(index + 1);
     }
     if (my === seq) emit();
   }
@@ -435,13 +606,15 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   }
 
   function toggleOn() {
-    if (engine === "audio") audio.play().catch(() => {});
+    if (wantPlay !== null && !engine) wantPlay = true;
+    else if (engine === "audio") audio.play().catch(() => {});
     else if (engine === "yt" && yt) yt.playVideo();
   }
 
   function toggle() {
     if (!cur) return;
-    if (engine === "audio") audio.paused ? audio.play() : audio.pause();
+    if (wantPlay !== null && !engine) wantPlay = !wantPlay; // ainda trocando: vale quando terminar
+    else if (engine === "audio") audio.paused ? audio.play() : audio.pause();
     else if (engine === "yt" && yt) ytPlaying ? yt.pauseVideo() : yt.playVideo();
     setTimeout(emit, 50);
   }
