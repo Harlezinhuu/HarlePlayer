@@ -249,12 +249,26 @@ async function radioFor(last, auto) {
 /** Outra versão da mesma música no YouTube Music (a de áudio oficial costuma
  *  deixar tocar no player embutido, o clipe da gravadora não). */
 async function findYoutubeAlternate(t) {
-  if (!t.title) return null;
+  if (!t.title) return [];
   const vid = (u) => /[?&]v=([\w-]{11})|youtu\.be\/([\w-]{11})/.exec(u || "")?.slice(1).find(Boolean);
-  const res = await api.invoke("search_music", { service: "ytmusic", query: `${t.title} ${t.artist || ""}`.trim() });
-  const mine = vid(t.url);
-  const f = (res?.tracks || []).map((x) => toTrack(x, "ytmusic")).find((x) => vid(x.url) && vid(x.url) !== mine);
-  return f || null;
+  const q = `${t.title} ${t.artist || ""}`.trim();
+  // 1º a versão de áudio oficial; depois vídeos com letra / uploads de fãs,
+  // que quase nunca bloqueiam tocar fora do YouTube (o clipe da gravadora bloqueia)
+  const [songs, lyrics] = await Promise.all([
+    api.invoke("search_music", { service: "ytmusic", query: q }).catch(() => null),
+    api.invoke("search_page", { service: "ytmusic", query: `${q} lyrics`, kind: "videos", cursor: null }).catch(() => null),
+  ]);
+  const seen = new Set([vid(t.url)]);
+  const out = [];
+  for (const x of [...(songs?.tracks || []).slice(0, 1), ...(lyrics?.tracks || []).slice(0, 6)]) {
+    const tr = toTrack(x, "ytmusic");
+    const id = vid(tr.url);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(tr);
+    if (out.length >= 4) break;
+  }
+  return out;
 }
 
 function toTrack(t, service) {

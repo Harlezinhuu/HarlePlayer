@@ -460,17 +460,21 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     loading = true;
     emit();
     if (code === 152 || code === 153) ytEmbedBroken = true;
-    // 1) Clipe que não deixa tocar fora do YouTube: a versão de áudio oficial
-    //    (YouTube Music) quase sempre deixa, e não depende do yt-dlp.
-    if (!ytEmbedBroken && findAlternate && !cur.altTried) {
-      const alt = await findAlternate(cur).catch(() => null);
-      if (my !== seq) return;
-      const altId = alt?.url && youtubeId(alt.url);
-      if (altId && altId !== youtubeId(cur.url)) {
-        queue[index] = { ...cur, url: alt.url, altTried: true, cover: cur.cover || alt.cover };
+    // 1) Vídeo que não deixa tocar fora do YouTube (clipe de gravadora): tenta outras
+    //    versões da mesma música (áudio oficial, vídeo com letra…), sem yt-dlp.
+    if (!ytEmbedBroken && findAlternate) {
+      if (!cur.alts) {
+        const list = await findAlternate(cur).catch(() => []);
+        if (my !== seq) return;
+        queue[index] = { ...cur, alts: Array.isArray(list) ? list : list ? [list] : [], altIdx: 0, origUrl: cur.origUrl || cur.url };
+        cur = queue[index];
+      }
+      const alt = cur.alts[cur.altIdx];
+      if (alt?.url) {
+        queue[index] = { ...cur, url: alt.url, altIdx: cur.altIdx + 1, cover: cur.cover || alt.cover };
         cur = queue[index];
         onQueue(queueInfo());
-        toast("Esse clipe não deixa tocar fora do YouTube, tocando a versão de áudio…", 3500);
+        if (cur.altIdx === 1) toast("Essa versão não deixa tocar fora do YouTube, procurando outra…", 3500);
         try {
           await playYouTube(cur, my);
           return;
