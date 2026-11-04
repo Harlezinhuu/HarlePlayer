@@ -41,23 +41,6 @@ pub fn control(action: &str, position_ms: Option<i64>) -> Result<(), String> {
     imp::control(action, position_ms)
 }
 
-/// O player interno do Harle está tocando? Aí o leitor do Windows desacelera
-/// (o app ignora as outras sessões nessa hora, a não ser que outra comece a tocar).
-static INTERNAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-pub fn set_internal(on: bool) {
-    INTERNAL.store(on, std::sync::atomic::Ordering::Relaxed);
-}
-
-fn internal() -> bool {
-    INTERNAL.load(std::sync::atomic::Ordering::Relaxed)
-}
-
-/// Sessão do próprio Harle Player (o player escondido do YouTube aparece pro Windows).
-fn is_own(source: &str) -> bool {
-    source.to_ascii_lowercase().contains("harle")
-}
-
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -78,8 +61,7 @@ fn sniff_mime(bytes: &[u8]) -> &'static str {
 
 #[cfg(windows)]
 mod imp {
-    use super::{internal, is_own, now_ms, sniff_mime, MediaState};
-    use std::time::Instant;
+    use super::{now_ms, sniff_mime, MediaState};
     use base64::Engine;
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
@@ -226,8 +208,6 @@ mod imp {
             let mut fails = 0u32;
             let mut service = String::new();
             let mut service_checks = 0u32;
-            // varrer as janelas abertas custa: no máximo a cada 2 s
-            let mut scan: Option<(Instant, Option<crate::detect::BrowserTrack>)> = None;
 
             loop {
                 if mgr.is_none() {
@@ -243,18 +223,12 @@ mod imp {
                                 // O Chrome às vezes esconde a música ("Um site está com mídia
                                 // aberta"); aí o nome vem do título da janela do navegador.
                                 let mut from_window = None;
-                                if crate::detect::is_placeholder(&st.title) && !is_own(&st.source) {
-                                    let stale = scan.as_ref().map_or(true, |(at, _)| at.elapsed() >= Duration::from_secs(2));
-                                    if stale {
-                                        scan = Some((Instant::now(), crate::detect::track_from_browser_windows()));
+                                if crate::detect::is_placeholder(&st.title) {
+                                    if let Some(bt) = crate::detect::track_from_browser_windows() {
+                                        st.title = bt.title;
+                                        st.artist = bt.artist;
+                                        from_window = Some(bt.service);
                                     }
-                                    if let Some((_, Some(bt))) = &scan {
-                                        st.title = bt.title.clone();
-                                        st.artist = bt.artist.clone();
-                                        from_window = Some(bt.service.clone());
-                                    }
-                                } else {
-                                    scan = None;
                                 }
                                 let key = format!("{}\u{1f}{}\u{1f}{}", st.title, st.artist, st.source);
                                 if key != last_key {
@@ -314,7 +288,7 @@ mod imp {
                     }
                 }
 
-                std::thread::sleep(Duration::from_millis(if internal() { 1200 } else { 400 }));
+                std::thread::sleep(Duration::from_millis(400));
             }
         });
     }
@@ -360,7 +334,7 @@ mod imp {
     use tauri::AppHandle;
 
     pub fn start(_app: AppHandle) {
-        let _ = (super::now_ms(), super::sniff_mime(&[]), super::internal(), super::is_own(""));
+        let _ = (super::now_ms(), super::sniff_mime(&[]));
     }
 
     pub fn current() -> MediaState {
@@ -374,15 +348,7 @@ mod imp {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_own, sniff_mime};
-
-    #[test]
-    fn reconhece_a_propria_sessao() {
-        assert!(is_own("Harle Player"));
-        assert!(is_own("C:\\Program Files\\Harle Player\\harle-player.exe"));
-        assert!(!is_own("Spotify.exe"));
-        assert!(!is_own("chrome"));
-    }
+    use super::sniff_mime;
 
     #[test]
     fn reconhece_formato_da_capa() {

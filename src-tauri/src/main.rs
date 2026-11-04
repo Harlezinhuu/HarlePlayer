@@ -18,7 +18,6 @@ mod visualizer;
 mod volume;
 mod wallpaper;
 mod ytdlp;
-mod ytembed;
 mod ytauth;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
@@ -37,12 +36,6 @@ struct TrayState {
 #[tauri::command]
 fn get_media() -> media::MediaState {
     media::current()
-}
-
-/// O player interno começou/parou de tocar (o leitor do Windows desacelera).
-#[tauri::command]
-fn media_internal(active: bool) {
-    media::set_internal(active);
 }
 
 #[tauri::command]
@@ -568,9 +561,6 @@ fn main() {
         })
         .setup(|app| {
             build_tray(app)?;
-            if let Some(w) = app.get_webview_window("main") {
-                ytembed::install(&w);
-            }
             media::start_watcher(app.handle().clone());
             discord::start();
             {
@@ -584,7 +574,6 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_media,
-            media_internal,
             media_control,
             http_get,
             open_url,

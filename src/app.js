@@ -200,24 +200,16 @@ function control(action, positionMs) {
 // ===================================================================
 const PLAYABLE = { soundcloud: true, ytmusic: true, youtube: true };
 let local = null; // estado do player interno enquanto ele tem música
-let internalBusy = false;
 const player = IS_WALLPAPER
   ? null
   : createPlayer({
       api,
       toast,
       resolve: (t) => libraryUi.resolveTrack(t),
-      findAlternate: findYoutubeAlternate,
       onRunOut: radioFor,
       onQueue: () => libraryUi.renderQueue(),
       onState: (st) => {
         local = st.available ? st : null;
-        // tocando aqui dentro: o leitor do Windows pode ir mais devagar
-        const busy = !!(local && (local.playing || local.loading));
-        if (busy !== internalBusy) {
-          internalBusy = busy;
-          api.invoke("media_internal", { active: busy }).catch(() => {});
-        }
         if (local) onMedia(st, true);
         else api.invoke("get_media").then((x) => onMedia(x)).catch(() => {});
       },
@@ -244,31 +236,6 @@ async function radioFor(last, auto) {
     if (!auto) toast(`Não achei músicas parecidas: ${e?.message || e}`, 4000);
     return null;
   }
-}
-
-/** Outra versão da mesma música no YouTube Music (a de áudio oficial costuma
- *  deixar tocar no player embutido, o clipe da gravadora não). */
-async function findYoutubeAlternate(t) {
-  if (!t.title) return [];
-  const vid = (u) => /[?&]v=([\w-]{11})|youtu\.be\/([\w-]{11})/.exec(u || "")?.slice(1).find(Boolean);
-  const q = `${t.title} ${t.artist || ""}`.trim();
-  // 1º a versão de áudio oficial; depois vídeos com letra / uploads de fãs,
-  // que quase nunca bloqueiam tocar fora do YouTube (o clipe da gravadora bloqueia)
-  const [songs, lyrics] = await Promise.all([
-    api.invoke("search_music", { service: "ytmusic", query: q }).catch(() => null),
-    api.invoke("search_page", { service: "ytmusic", query: `${q} lyrics`, kind: "videos", cursor: null }).catch(() => null),
-  ]);
-  const seen = new Set([vid(t.url)]);
-  const out = [];
-  for (const x of [...(songs?.tracks || []).slice(0, 1), ...(lyrics?.tracks || []).slice(0, 6)]) {
-    const tr = toTrack(x, "ytmusic");
-    const id = vid(tr.url);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push(tr);
-    if (out.length >= 4) break;
-  }
-  return out;
 }
 
 function toTrack(t, service) {

@@ -118,32 +118,15 @@ export function initRemote(app) {
     const box = $("#remoteBox");
     box.hidden = !(settings.remote && remoteInfo);
     if (box.hidden) return;
-    // QR e IP só aparecem quando a pessoa pede (print/live não vaza o endereço)
-    box.classList.toggle("shown", remoteShown);
-    if (remoteShown) drawQr($("#remoteQr"), remoteInfo.url, 5);
-    else {
-      const c = $("#remoteQr");
-      c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
-    }
-    $("#remoteUrl").textContent = remoteShown ? remoteInfo.url.replace(/\?k=.*/, "") : "Endereço oculto";
+    drawQr($("#remoteQr"), remoteInfo.url, 5);
+    $("#remoteUrl").textContent = remoteInfo.url.replace(/\?k=.*/, "");
   }
-  let remoteShown = false, remoteHideTimer = 0;
-  function showRemoteCode(on) {
-    remoteShown = on;
-    clearTimeout(remoteHideTimer);
-    if (on) remoteHideTimer = setTimeout(() => showRemoteCode(false), 60000);
-    renderRemote();
-  }
-  $("#remoteReveal").addEventListener("click", () => showRemoteCode(true));
-  // fechou as configurações: esconde de novo
-  new MutationObserver(() => { if ($("#settings").hidden && remoteShown) showRemoteCode(false); })
-    .observe($("#settings"), { attributes: true, attributeFilter: ["hidden"] });
   $("#swRemote").addEventListener("click", () => setRemote(!settings.remote));
   $("#remoteNew").addEventListener("click", async (e) => {
     e.preventDefault();
     try {
       remoteInfo = (await api.invoke("remote_new_code")) || remoteInfo;
-      showRemoteCode(true);
+      renderRemote();
       toast("Código novo: escaneie o QR de novo no celular");
     } catch (err) {
       toast(String(err));
