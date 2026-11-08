@@ -387,6 +387,52 @@ pub fn soundcloud_audio(permalink: &str) -> Result<Vec<u8>, String> {
     soundcloud::audio(permalink)
 }
 
+/// Baixa vários pedaços com `workers` conexões ao mesmo tempo e junta na ordem
+/// original. Para no primeiro erro ou se passar de `max_total` bytes.
+pub(crate) fn fetch_ordered<F>(parts: &[String], workers: usize, max_total: usize, get: F) -> Result<Vec<u8>, String>
+where
+    F: Fn(&str) -> Result<Vec<u8>, String> + Sync,
+{
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    let next = AtomicUsize::new(0);
+    let total = AtomicUsize::new(0);
+    let stop = AtomicBool::new(false);
+    let slots: Vec<Mutex<Option<Result<Vec<u8>, String>>>> = parts.iter().map(|_| Mutex::new(None)).collect();
+    std::thread::scope(|sc| {
+        for _ in 0..workers.max(1).min(parts.len().max(1)) {
+            sc.spawn(|| loop {
+                if stop.load(Ordering::Relaxed) {
+                    break;
+                }
+                let i = next.fetch_add(1, Ordering::Relaxed);
+                let Some(url) = parts.get(i) else { break };
+                let r = get(url);
+                match &r {
+                    Ok(b) => {
+                        if total.fetch_add(b.len(), Ordering::Relaxed) + b.len() > max_total {
+                            stop.store(true, Ordering::Relaxed);
+                        }
+                    }
+                    Err(_) => stop.store(true, Ordering::Relaxed),
+                }
+                *slots[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+            });
+        }
+    });
+    if total.load(Ordering::Relaxed) > max_total {
+        return Err("Música grande demais".into());
+    }
+    let mut out = Vec::with_capacity(total.load(Ordering::Relaxed));
+    for slot in slots {
+        match slot.into_inner().unwrap_or_else(|e| e.into_inner()) {
+            Some(Ok(b)) => out.extend(b),
+            Some(Err(e)) => return Err(e),
+            None => return Err("download interrompido".into()),
+        }
+    }
+    Ok(out)
+}
+
 fn enc(s: &str) -> String {
     let mut out = String::with_capacity(s.len() * 3);
     for b in s.bytes() {
@@ -827,15 +873,11 @@ mod soundcloud {
         if tc["format"]["protocol"] == "progressive" {
             return http_bytes(media_url);
         }
-        // HLS: baixa a playlist e junta os pedaços num arquivo só
+        // HLS: baixa a playlist e junta os pedaços num arquivo só. Os pedaços
+        // vêm em paralelo (antes era um por um: ~20 pedidos em fila antes de tocar)
         let playlist = http_get(media_url).map_err(err_text)?;
-        let mut out = Vec::new();
-        for part in hls_parts(media_url, &playlist) {
-            out.extend(http_bytes(&part)?);
-            if out.len() > MAX_AUDIO {
-                return Err("Música grande demais".into());
-            }
-        }
+        let parts = hls_parts(media_url, &playlist);
+        let out = super::fetch_ordered(&parts, 6, MAX_AUDIO, |u| http_bytes(u))?;
         if out.is_empty() {
             return Err("O SoundCloud mandou uma playlist de áudio vazia".into());
         }
@@ -1453,6 +1495,22 @@ mod ytmusic {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pedacos_em_paralelo_na_ordem() {
+        let parts: Vec<String> = (0..20).map(|i| i.to_string()).collect();
+        let out = fetch_ordered(&parts, 6, 1 << 20, |u| {
+            let n: u64 = u.parse().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis((n * 7) % 15));
+            Ok(vec![n as u8; 2])
+        })
+        .unwrap();
+        let expect: Vec<u8> = (0..20u8).flat_map(|n| vec![n; 2]).collect();
+        assert_eq!(out, expect);
+        let e = fetch_ordered(&parts, 6, 1 << 20, |u| if u == "7" { Err("x".into()) } else { Ok(vec![1]) });
+        assert!(e.is_err());
+        assert!(fetch_ordered(&parts, 6, 10, |_| Ok(vec![0; 4])).is_err());
+    }
 
     #[test]
     fn enc_codifica_url() {

@@ -23,6 +23,8 @@
     <div class="bg-shade"></div>
     <div class="bg-dim"></div>
     <div class="bg-grain"></div>
+    <!-- brilho nas bordas da tela, na cor do fundo (pulsa no grave) -->
+    <div class="edge-glow"><div class="edge-glow-pulse"></div></div>
   </div>
 
   <!-- ===== Efeitos (partículas, ondas, explosão no drop) ===== -->
@@ -80,6 +82,8 @@
   <!-- ===== Carrossel de capas ===== -->
   <main id="stage">
     <div id="carousel"></div>
+    <!-- "Abrindo no YouTube Music…" enquanto a música carrega -->
+    <div id="loadPill" aria-live="polite"><i></i><i></i><i></i><span></span></div>
     <div id="results" hidden>
       <div class="res-tabs" id="resTabs">
         <button data-rt="all" class="sel">Tudo</button>
@@ -102,6 +106,8 @@
         <div id="fullMore" class="res-more"></div>
       </div>
     </div>
+    <!-- cartão do artista (clicar num artista na busca) -->
+    <section id="artistCard" hidden></section>
   </main>
 
   <!-- ===== Barra inferior: busca + player ===== -->
@@ -224,6 +230,11 @@
         <button data-v="solid">Sólido</button>
         <button data-v="thin">Fino</button>
         <button data-v="outline">Contorno</button>
+        <button data-v="tall">Alto</button>
+      </div>
+      <div class="row toggle-row">
+        <span>Brilho nas bordas da tela</span>
+        <button class="switch" id="swEdgeGlow" role="switch"></button>
       </div>
       <div class="row toggle-row">
         <span>Relógio 24 horas</span>

@@ -20,6 +20,7 @@ import { initWrapped } from "./features/wrapped.js";
 import { initSettings } from "./features/settings.js";
 import { initSearch } from "./features/search.js";
 import { initLibrary } from "./features/library.js";
+import { initArtist } from "./features/artist.js";
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -33,6 +34,25 @@ const api = T
       emit: (ev, payload) => T.event.emit(ev, payload),
     }
   : (await import("./demo.js")).createDemoApi();
+
+// Buscas repetidas (voltar pra mesma busca, versões alternativas, página do
+// artista) saem na hora: guarda o resultado por 10 min.
+{
+  const raw = api.invoke.bind(api);
+  const cache = new Map();
+  const CACHED = new Set(["search_music", "search_page"]);
+  api.invoke = (cmd, args) => {
+    if (!CACHED.has(cmd)) return raw(cmd, args);
+    const key = cmd + JSON.stringify(args || {});
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < 10 * 60e3) return hit.p.then((v) => structuredClone(v));
+    const p = Promise.resolve(raw(cmd, args));
+    cache.set(key, { at: Date.now(), p });
+    p.catch(() => cache.delete(key));
+    if (cache.size > 80) cache.delete(cache.keys().next().value);
+    return p.then((v) => structuredClone(v));
+  };
+}
 
 // A mesma página roda em duas janelas: o player ("main") e o wallpaper
 // atrás dos ícones ("wallpaper"). No navegador, use ?wallpaper pra ver o layout.
@@ -93,7 +113,8 @@ const DEFAULTS = {
   partyName: "",
   partyMode: "harle", // convidado: "harle" (toca aqui) | "spotify" (abre no Spotify, experimental)
   clock24: true,
-  clockStyle: "solid", // solid | thin | outline
+  clockStyle: "solid", // solid | thin | outline | tall
+  edgeGlow: true, // brilho nas bordas da tela
   wallpaperMode: false, // wallpaper animado atrás dos ícones
   wallpaperId: "builtin:aurora",
   wallFit: "auto", // auto | cover | contain (inteiro, com as laterais desfocadas)
@@ -208,6 +229,7 @@ const player = IS_WALLPAPER
       toast,
       resolve: (t) => libraryUi.resolveTrack(t),
       findAlternate: findYoutubeAlternate,
+      warmYouTube: !api.demo,
       onRunOut: radioFor,
       onQueue: () => libraryUi.renderQueue(),
       onState: (st) => {
@@ -329,6 +351,9 @@ function setAccent(rgb, fromCover = true) {
   const lyric = hslToRgb(h, Math.max(0.6, Math.min(s, 0.95)), 0.8);
   document.documentElement.style.setProperty("--accent", accent.join(", "));
   document.documentElement.style.setProperty("--lyric", lyric.join(", "));
+  // 2ª cor (vizinha na roda de cores): degradê do relógio "Alto" e das bordas
+  const accent2 = hslToRgb((h + 0.11) % 1, Math.max(0.6, Math.min(s, 0.95)), 0.7);
+  document.documentElement.style.setProperty("--accent2", accent2.join(", "));
 }
 function accentFrom(src) {
   if (!src) return setAccent([120, 170, 255]);
@@ -803,6 +828,7 @@ const app = {
   get discordStatusTimer() { return discordStatusTimer; }, set discordStatusTimer(v) { discordStatusTimer = v; },
   get dropNow() { return dropNow; },
   get enc() { return enc; },
+  get esc() { return esc; },
   get fitter() { return fitter; },
   get history() { return history; }, set history(v) { history = v; },
   get httpJson() { return httpJson; },
@@ -994,6 +1020,10 @@ function renderMini() {
   if (cover) mc.src = cover;
   else mc.removeAttribute("src");
   $("#tDur").textContent = fmt(media.durationMs);
+  // pílula "Abrindo no …" em cima do carrossel enquanto carrega
+  const isLoading = !!(curKey && media.loading);
+  document.body.classList.toggle("is-loading", isLoading);
+  if (isLoading) $("#loadPill span").textContent = `Abrindo no ${via || "player"}…`;
   // cartão "tocando agora" do wallpaper
   document.body.classList.toggle("has-media", !!curKey);
   $("#ncTitle").textContent = curKey ? media.title : "";
@@ -1334,6 +1364,7 @@ function closeSearch() {
   if (searchUi.resTab !== "all") searchUi.setResTab("all");
   $("#stage").classList.remove("searching");
   $("#results").hidden = true;
+  app.closeArtist?.();
 }
 
 // Busca nativa: SoundCloud e YouTube Music buscam no próprio serviço (pelo Rust).
@@ -1477,16 +1508,17 @@ async function runSearch(q) {
     const el = e.target.closest("[data-a]");
     if (!el) return;
     const a = artists[+el.dataset.a];
-    if (player && PLAYABLE[svc]) {
-      searchUi.input.value = a.name; // busca as músicas do artista
-      return runSearch(a.name);
-    }
+    if (player && PLAYABLE[svc]) return artistUi.open(a); // cartão do artista
     open(a.name, a.url);
   };
 }
 
 // Busca completa: abas Tudo · Músicas · Artistas, com "carregar mais" → features/search.js
 const searchUi = initSearch(app);
+// Cartão do artista → features/artist.js
+const artistUi = initArtist(app);
+app.openArtist = (a) => artistUi.open(a);
+app.closeArtist = () => artistUi.close();
 
 // Configurações → features/settings.js
 const settingsUi = initSettings(app);
@@ -1579,6 +1611,11 @@ document.addEventListener("pointerdown", (e) => {
   if (!e.target.closest("#volumePop, #btnVolume")) closeVolume();
 });
 paintVolume();
+$("#swEdgeGlow").addEventListener("click", () => {
+  settings.edgeGlow = settings.edgeGlow === false;
+  saveSettings();
+  settingsUi.renderSettings();
+});
 $("#sw24").addEventListener("click", () => {
   settings.clock24 = !settings.clock24;
   saveSettings();

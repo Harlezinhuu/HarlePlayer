@@ -1,5 +1,6 @@
 :root {
   --accent: 120, 170, 255;          /* cor tirada da capa (r, g, b) */
+  --accent2: 140, 120, 255;         /* 2ª cor (vizinha na roda) */
   --lyric: 168, 196, 255;
   --text: #eef3ff;
   --muted: rgba(225, 233, 255, 0.58);
@@ -129,6 +130,47 @@ body.clock-outline #time {
   text-shadow: 0 0 36px rgba(var(--accent), 0.35);
 }
 
+/* Alto: números altos e finos com degradê de duas cores do fundo */
+body.clock-tall #time {
+  font-family: var(--font-clock);
+  font-weight: 200;
+  font-size: calc(var(--clock) * 1.55);
+  line-height: 0.78;
+  letter-spacing: -0.02em;
+  /* estreita os números: fica alto e fino como no vídeo, em qualquer fonte */
+  transform: scaleX(0.6); transform-origin: left top;
+  background: linear-gradient(180deg, rgba(var(--accent2), 1) 0%, rgba(var(--lyric), 1) 48%, rgba(var(--accent), 1) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 22px rgba(var(--accent), 0.4));
+}
+body.clock-tall #queue { top: calc(5vh + var(--clock) * 1.42 + 5.5vh); }
+body.clock-tall.layout-mirror #time, body.clock-tall.mode-wallpaper #time { transform-origin: right top; }
+
+/* ---------- brilho nas bordas ---------- */
+.edge-glow { display: none; position: absolute; inset: 0; pointer-events: none; }
+body.edge-glow-on .edge-glow { display: block; }
+.edge-glow, .edge-glow-pulse {
+  box-shadow:
+    inset 0 26px 46px -18px rgba(var(--accent2), 0.75),
+    inset 0 -26px 46px -18px rgba(var(--accent), 0.75),
+    inset 22px 0 42px -20px rgba(var(--accent), 0.5),
+    inset -22px 0 42px -20px rgba(var(--accent2), 0.5),
+    inset 0 0 2px 1px rgba(var(--lyric), 0.55);
+}
+.edge-glow { opacity: 0.75; }
+/* o pulso é a mesma moldura mais forte, só muda a opacidade (barato pra GPU) */
+.edge-glow-pulse {
+  position: absolute; inset: 0;
+  box-shadow:
+    inset 0 40px 70px -20px rgba(var(--accent2), 0.9),
+    inset 0 -40px 70px -20px rgba(var(--accent), 0.9),
+    inset 34px 0 60px -24px rgba(var(--accent), 0.7),
+    inset -34px 0 60px -24px rgba(var(--accent2), 0.7);
+  opacity: calc(var(--beat, 0) * 0.9); will-change: opacity;
+}
+body.no-visualizer .edge-glow-pulse { display: none; }
+
 /* ---------- continuar ouvindo ---------- */
 #queue {
   position: fixed; z-index: 3; left: 3.6vw; top: calc(5vh + var(--clock) * 1.12 + 5.5vh); bottom: 13vh;
@@ -246,6 +288,24 @@ body.playing .eq i { animation: eq 0.9s ease-in-out infinite; will-change: trans
   perspective: 1400px;
 }
 #carousel { position: relative; width: var(--card); height: calc(var(--card) * 1.28); transform-style: preserve-3d; }
+/* "Abrindo no YouTube Music…" (aparece só enquanto carrega) */
+#loadPill {
+  position: absolute; left: 50%; bottom: calc(50% - var(--card) * 0.68 - 52px); z-index: 120;
+  display: flex; align-items: center; gap: 3px; padding: 7px 14px 7px 12px; border-radius: 999px;
+  background: rgba(14, 16, 28, 0.62); border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  color: rgba(240, 244, 255, 0.92); font-size: 12px; font-weight: 600; white-space: nowrap;
+  opacity: 0; transform: translate(-50%, 6px); pointer-events: none;
+  transition: opacity 0.25s, transform 0.3s var(--ease);
+}
+body.is-loading #loadPill { opacity: 1; transform: translate(-50%, 0); }
+#loadPill span { margin-left: 7px; }
+#loadPill i { width: 3px; height: 12px; border-radius: 2px; background: rgb(var(--lyric)); transform-origin: bottom; animation: lpBar 0.9s ease-in-out infinite; }
+#loadPill i:nth-child(2) { animation-delay: -0.3s; }
+#loadPill i:nth-child(3) { animation-delay: -0.6s; }
+@keyframes lpBar { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+body:not(.is-loading) #loadPill i { animation: none; }
+#stage:has(#results:not([hidden])) #loadPill { bottom: 4px; }
 .card {
   position: absolute; inset: 0;
   padding: 10px 10px 0; border-radius: 22px;
@@ -1000,3 +1060,47 @@ body.mode-wallpaper #partyPanel { display: none !important; }
 .res-tile:hover .tile-play { opacity: 1; transform: none; }
 .res-tile .tile-play svg { width: 14px; height: 14px; fill: currentColor; }
 .res-tile.busy img { opacity: .5; }
+
+/* ---------- cartão do artista ---------- */
+#artistCard {
+  position: absolute; z-index: 130; inset: 0 2vw;
+  display: grid; grid-template-columns: minmax(200px, 34%) 1fr; gap: 28px;
+  padding: 26px 28px; border-radius: 26px;
+  background: rgba(12, 13, 22, 0.88);
+  backdrop-filter: blur(30px) saturate(1.5); -webkit-backdrop-filter: blur(30px) saturate(1.5);
+  border: 1px solid var(--stroke);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45), 0 0 60px rgba(var(--accent), 0.18);
+  animation: rise 0.4s var(--ease);
+  overflow: hidden;
+}
+#artistCard[hidden] { display: none; }
+.ac-close {
+  position: absolute; top: 12px; right: 14px; width: 30px; height: 30px; border-radius: 50%;
+  border: 0; background: rgba(255, 255, 255, 0.08); color: #fff; cursor: pointer; font-size: 13px;
+}
+.ac-close:hover { background: rgba(255, 255, 255, 0.18); }
+.ac-left { display: flex; flex-direction: column; min-width: 0; }
+.ac-photo { aspect-ratio: 1; width: min(100%, 240px, 24vh); flex: none; border-radius: 18px; overflow: hidden; background: rgba(255, 255, 255, 0.06); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4); }
+.ac-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ac-left h2 { margin: 14px 0 6px; font-size: clamp(20px, 2.4vw, 30px); font-weight: 800; letter-spacing: -0.02em; }
+.ac-bio { margin: 0; font-size: 12.5px; line-height: 1.45; color: rgba(225, 232, 250, 0.72); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ac-btns { display: flex; gap: 10px; margin-top: 14px; }
+.ac-btns button { border: 0; border-radius: 999px; padding: 9px 18px; font: 600 13px var(--font-ui); cursor: pointer; }
+.ac-play { background: #fff; color: #111; }
+.ac-shuffle { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.ac-btns button:disabled { opacity: 0.4; cursor: default; }
+.ac-right { min-width: 0; display: flex; flex-direction: column; }
+.ac-right h3 { margin: 4px 0 10px; font-size: 15px; font-weight: 700; }
+.ac-songs { list-style: none; margin: 0; padding: 0 4px 0 0; overflow-y: auto; scrollbar-width: none; }
+.ac-songs li { display: flex; align-items: center; gap: 12px; padding: 7px 8px; border-radius: 12px; cursor: pointer; }
+.ac-songs li:hover { background: rgba(255, 255, 255, 0.08); }
+.ac-songs li img, .ac-songs li i { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; background: rgba(255, 255, 255, 0.07); }
+.ac-songs li div { min-width: 0; display: flex; flex-direction: column; }
+.ac-songs b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-songs span { font-size: 11.5px; color: rgba(225, 232, 250, 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-songs .ac-empty { cursor: default; color: rgba(225, 232, 250, 0.6); font-size: 13px; }
+.sk-line { display: block; height: 10px; border-radius: 6px; margin: 6px 0; background: rgba(255, 255, 255, 0.09); }
+.sk-line.short { width: 60%; }
+.sk-row { cursor: default !important; }
+.sk-row .sk-line { flex: 1; }
+@media (max-width: 760px) { #artistCard { grid-template-columns: 1fr; overflow-y: auto; } .ac-photo { max-width: 160px; } }

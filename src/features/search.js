@@ -204,11 +204,7 @@ export function initSearch(app) {
     const art = e.target.closest("[data-fa]");
     if (art) {
       const a = full.items[+art.dataset.fa];
-      if (player && PLAYABLE[full.svc]) {
-        input.value = a.name;
-        runSearch(a.name);
-        return setResTab("tracks");
-      }
+      if (player && PLAYABLE[full.svc]) return app.openArtist(a);
       if (full.source !== "deezer" || full.svc === "deezer") return api.invoke("open_url", { url: a.url }).catch(() => {});
       openInService(a.name);
     }

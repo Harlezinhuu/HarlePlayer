@@ -38,7 +38,7 @@ export function eqPreamp(gains) {
   return Math.pow(10, (-boost * 0.6) / 20);
 }
 
-export function createPlayer({ api, onState, onQueue = () => {}, resolve = null, findAlternate = null, toast, ytHostId = "ytHost", onRunOut = null }) {
+export function createPlayer({ api, onState, onQueue = () => {}, resolve = null, findAlternate = null, toast, ytHostId = "ytHost", onRunOut = null, warmYouTube = false }) {
   const audio = new Audio();
   audio.preload = "auto";
 
@@ -310,8 +310,33 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
   });
 
   // Baixa o áudio pelo Rust (SoundCloud direto; YouTube pelo yt-dlp) e toca no <audio>.
+  // A próxima do SoundCloud já vem baixando enquanto a atual toca (pular fica
+  // instantâneo). Só ela, e nunca do YouTube (o yt-dlp em excesso leva bloqueio).
+  const prefetched = new Map(); // "cmd|url" -> Promise<bytes>
+  function fetchAudio(cmd, url) {
+    const key = `${cmd}|${url}`;
+    const p = prefetched.get(key);
+    if (p) {
+      prefetched.delete(key);
+      return p.catch(() => api.invoke(cmd, { url })); // pré-carga falhou: tenta de novo
+    }
+    return api.invoke(cmd, { url });
+  }
+  function prefetchNext(my) {
+    if (my !== seq) return;
+    const n = Q.nextIndex(q(), repeat, true);
+    const t = n >= 0 && n !== index ? queue[n] : null;
+    if (t?.service !== "soundcloud" || !t.url) return;
+    const key = `soundcloud_audio|${t.url}`;
+    if (prefetched.has(key)) return;
+    prefetched.clear();
+    const p = api.invoke("soundcloud_audio", { url: t.url });
+    p.catch(() => prefetched.delete(key));
+    prefetched.set(key, p);
+  }
+
   async function playDownloaded(cmd, track, my) {
-    const buf = await api.invoke(cmd, { url: track.url });
+    const buf = await fetchAudio(cmd, track.url);
     if (my !== seq) return;
     const bytes = new Uint8Array(buf);
     if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -449,6 +474,10 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
     });
     return ytReady;
   }
+  // deixa o player do YouTube pronto logo depois de abrir o app: a 1ª música
+  // do YouTube não precisa esperar ele baixar
+  if (warmYouTube) setTimeout(() => { if (!ytReady && navigator.onLine !== false) loadYouTube().catch(() => {}); }, 3000);
+
 
   // Player oficial recusou (vídeo bloqueia tocar fora do YouTube): tenta pelo yt-dlp.
   async function youtubeFailed(code) {
@@ -559,7 +588,11 @@ export function createPlayer({ api, onState, onQueue = () => {}, resolve = null,
       if (my !== seq) return;
       if (failed(String(e?.message || e)) && index + 1 < queue.length) return playIndex(index + 1);
     }
-    if (my === seq) emit();
+    if (my === seq) {
+      emit();
+      // deixa a atual engrenar antes de pré-carregar a próxima
+      setTimeout(() => prefetchNext(my), 4000);
+    }
   }
 
   // A fila acabou: pede músicas parecidas (rádio), emenda no fim e continua.

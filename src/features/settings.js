@@ -10,13 +10,15 @@ export function initSettings(app) {
     document.querySelectorAll("#segBg button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.bg));
     $("#swLyrics").classList.toggle("on", settings.lyrics);
     $("#sw24").classList.toggle("on", settings.clock24);
+    $("#swEdgeGlow").classList.toggle("on", settings.edgeGlow !== false);
+    document.body.classList.toggle("edge-glow-on", settings.edgeGlow !== false);
     $("#swWallpaper").classList.toggle("on", settings.wallpaperMode);
     $("#offVal").textContent = `${settings.lyricsOffset > 0 ? "+" : ""}${settings.lyricsOffset.toFixed(1).replace(".", ",")} s`;
     $("#btnLyrics").classList.toggle("on", settings.lyrics);
     document.body.classList.toggle("no-lyrics", !settings.lyrics);
     document.body.classList.toggle("lyrics-line", settings.lyricsMode !== "chunks");
     document.querySelectorAll("#segLyrics button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.lyricsMode));
-    for (const c of ["solid", "thin", "outline"]) document.body.classList.toggle(`clock-${c}`, settings.clockStyle === c);
+    for (const c of ["solid", "thin", "outline", "tall"]) document.body.classList.toggle(`clock-${c}`, settings.clockStyle === c);
     document.querySelectorAll("#segClock button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.clockStyle));
     document.querySelectorAll("#segFit button").forEach((b) => b.classList.toggle("sel", b.dataset.v === (settings.wallFit || "auto")));
     $("#swDiscord").classList.toggle("on", settings.discord);
