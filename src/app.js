@@ -21,6 +21,7 @@ import { initSettings } from "./features/settings.js";
 import { initSearch } from "./features/search.js";
 import { initLibrary } from "./features/library.js";
 import { initArtist } from "./features/artist.js";
+import { initHud } from "./features/hud.js";
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -115,6 +116,7 @@ const DEFAULTS = {
   clock24: true,
   clockStyle: "solid", // solid | thin | outline | tall
   edgeGlow: true, // brilho nas bordas da tela
+  hud: "classic", // classic | vinyl | studio | minimal
   wallpaperMode: false, // wallpaper animado atrás dos ícones
   wallpaperId: "builtin:aurora",
   wallFit: "auto", // auto | cover | contain (inteiro, com as laterais desfocadas)
@@ -1032,6 +1034,7 @@ function renderMini() {
   if (cover) nc.src = cover;
   else nc.removeAttribute("src");
   document.body.classList.toggle("playing", !!(media.available && media.playing));
+  app.hudUpdate?.({ key: curKey, title: media.title, artist: [media.artist || media.album, via].filter(Boolean).join(" · "), cover, durationMs: media.durationMs, playing: media.available && media.playing });
   renderModes();
   publishNow();
 }
@@ -1336,6 +1339,7 @@ function frame(t) {
   const sx = `scaleX(${Math.min(1, Math.max(0, pct / 100)).toFixed(4)})`;
   $("#progressFill").style.transform = sx;
   $("#ncFill").style.transform = sx;
+  app.hudTick?.(pos, media.durationMs, lyrics, keyOf(media));
   const sec = Math.floor(pos / 1000);
   if (sec !== lastSec) {
     lastSec = sec;
@@ -1519,6 +1523,15 @@ const searchUi = initSearch(app);
 const artistUi = initArtist(app);
 app.openArtist = (a) => artistUi.open(a);
 app.closeArtist = () => artistUi.close();
+// Estilos de HUD → features/hud.js
+const hudUi = initHud(app);
+app.applyHud = () => {
+  hudUi.apply();
+  renderMini();
+};
+app.hudUpdate = hudUi.update;
+app.hudTick = hudUi.tick;
+hudUi.apply();
 
 // Configurações → features/settings.js
 const settingsUi = initSettings(app);

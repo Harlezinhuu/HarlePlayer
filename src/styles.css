@@ -1104,3 +1104,105 @@ body.mode-wallpaper #partyPanel { display: none !important; }
 .sk-row { cursor: default !important; }
 .sk-row .sk-line { flex: 1; }
 @media (max-width: 760px) { #artistCard { grid-template-columns: 1fr; overflow-y: auto; } .ac-photo { max-width: 160px; } }
+
+/* =====================================================================
+   Estilos de HUD (Clássica é o layout de sempre)
+   ===================================================================== */
+#hudScene[hidden] { display: none; }
+#hudScene { position: absolute; inset: 0; display: grid; align-items: center; transition: opacity 0.3s, transform 0.3s var(--ease); }
+#stage.searching #hudScene { opacity: 0; pointer-events: none; transform: scale(0.96); }
+#hudScene .hs-vinyl, #hudScene .hs-cover, #hudScene .hs-lyr { display: none; }
+#hsTitle { font-size: clamp(22px, 3.4vh, 38px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#hsArtist { margin-top: 6px; font-size: clamp(13px, 1.8vh, 17px); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hs-prog { position: relative; height: 4px; margin-top: 18px; border-radius: 4px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+#hsFill { position: absolute; inset: 0; transform: scaleX(0); transform-origin: left; background: linear-gradient(90deg, rgb(var(--accent)), rgb(var(--accent2))); border-radius: 4px; }
+.hs-time { display: flex; justify-content: space-between; margin-top: 7px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Vinil ---------- */
+body.hud-vinyl #carousel { display: none; }
+body.hud-vinyl #hudScene { grid-template-columns: auto minmax(220px, 340px); justify-content: center; gap: clamp(28px, 4vw, 70px); }
+body.hud-vinyl #hudScene .hs-vinyl { display: block; position: relative; --disc: min(46vh, 30vw); width: calc(var(--disc) * 1.18); height: var(--disc); }
+.hs-disc {
+  position: absolute; left: 0; top: 0; width: var(--disc); height: var(--disc); border-radius: 50%;
+  background:
+    radial-gradient(circle, transparent 0 31%, rgba(0, 0, 0, 0) 31%),
+    repeating-radial-gradient(circle, #121218 0 1.5px, #1c1c24 1.5px 3px);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55), 0 0 0 2px rgba(255, 255, 255, 0.04), 0 0 calc(30px + var(--beat, 0) * 40px) rgba(var(--accent), 0.35);
+  animation: hsSpin 1.8s linear infinite; animation-play-state: paused;
+}
+/* reflexo de luz parado por cima (o disco gira por baixo) */
+.hs-vinyl::after {
+  content: ""; position: absolute; left: 0; top: 0; width: var(--disc); height: var(--disc); border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from 20deg, transparent 0 8%, rgba(255, 255, 255, 0.10) 13%, transparent 20% 52%, rgba(255, 255, 255, 0.07) 60%, transparent 68%);
+}
+#hudScene.is-playing .hs-disc { animation-play-state: running; }
+body.paused .hs-disc { animation-play-state: paused !important; }
+.hs-label {
+  position: absolute; inset: 31%; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle, rgb(var(--accent2)), rgb(var(--accent)));
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5);
+}
+.hs-label img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#hudScene.no-cover .hs-label img, #hudScene.no-cover .hs-cover img { visibility: hidden; }
+.hs-label::after { content: ""; position: absolute; left: 50%; top: 50%; width: 9%; height: 9%; transform: translate(-50%, -50%); border-radius: 50%; background: #0b0b10; box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.2); }
+@keyframes hsSpin { to { transform: rotate(360deg); } }
+/* braço da agulha: gira no pino; fora do disco quando pausado */
+.hs-arm {
+  position: absolute; left: calc(var(--disc) * 1.02); top: calc(var(--disc) * 0.02);
+  width: calc(var(--disc) * 0.12); height: calc(var(--disc) * 0.8);
+  transform-origin: 50% 8%; transform: rotate(-4deg);
+  transition: transform 0.9s cubic-bezier(0.5, 0, 0.2, 1);
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.5));
+}
+#hudScene.is-playing .hs-arm { transform: rotate(24deg); }
+.hs-arm i { position: absolute; display: block; }
+.hs-arm-base { left: 50%; top: 8%; width: 70%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle at 35% 30%, #d9dde6, #6d7280 70%); }
+.hs-arm-rod { left: calc(50% - 2.5px); top: 8%; width: 5px; height: 78%; border-radius: 3px; background: linear-gradient(90deg, #8a8f9c, #e7eaf1, #8a8f9c); }
+.hs-arm-head { left: 50%; top: 84%; width: 34%; height: 13%; transform: translateX(-50%) rotate(-14deg); border-radius: 3px; background: linear-gradient(180deg, #2a2c33, #15161b); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15); }
+body.hud-vinyl .hs-meta { min-width: 0; }
+
+/* ---------- Estúdio ---------- */
+body.hud-studio #carousel,
+body.hud-studio #queue,
+body.hud-studio #lyrics { display: none; }
+body.hud-studio:not(.mode-wallpaper) #stage { left: 5vw; right: 5vw; top: calc(5vh + var(--clock) * 1.1 + 3vh); bottom: 13vh; }
+body.hud-studio #hudScene { grid-template-columns: min(40vh, 30vw) 1fr; grid-template-rows: auto auto; column-gap: clamp(30px, 5vw, 90px); align-content: center; }
+body.hud-studio #hudScene .hs-cover { display: block; grid-row: 1; grid-column: 1; aspect-ratio: 1; border-radius: 22px; overflow: hidden; background: rgba(255, 255, 255, 0.06); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5), 0 0 60px rgba(var(--accent), 0.25); }
+.hs-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+body.hud-studio .hs-meta { grid-row: 2; grid-column: 1; margin-top: 18px; min-width: 0; }
+body.hud-studio #hudScene .hs-lyr {
+  display: block; grid-row: 1 / span 2; grid-column: 2; align-self: stretch; position: relative; overflow: hidden;
+  contain: size; /* a letra comprida não estica o palco */
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 18%, #000 78%, transparent);
+          mask-image: linear-gradient(180deg, transparent, #000 18%, #000 78%, transparent);
+}
+#hsLyrics { list-style: none; margin: 0; padding: 30% 0 60%; transition: transform 0.6s var(--ease); will-change: transform; }
+#hsLyrics li {
+  font-size: clamp(22px, 4.2vh, 44px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.18; margin: 0 0 0.5em;
+  color: rgba(255, 255, 255, 0.28); transition: color 0.35s, transform 0.35s var(--ease); transform-origin: left center;
+}
+#hsLyrics li.cur { color: #fff; transform: scale(1.03); text-shadow: 0 0 26px rgba(var(--accent), 0.55); }
+#hsLyrics li.cur ~ li { color: rgba(255, 255, 255, 0.42); }
+#hsLyrics .hs-nolyr { color: rgba(255, 255, 255, 0.45); font-size: clamp(18px, 3vh, 28px); font-weight: 600; }
+
+/* ---------- Minimal ---------- */
+body.hud-minimal #carousel { display: none; }
+body.hud-minimal #queue {
+  transform: translateX(calc(-100% - 5vw)); opacity: 0;
+  transition: transform 0.45s var(--ease), opacity 0.3s;
+}
+body.hud-minimal.reveal-queue #queue, body.hud-minimal #queue:focus-within { transform: none; opacity: 1; }
+body.hud-minimal #dock {
+  transform: translate(-50%, calc(100% + 4vh)); opacity: 0;
+  transition: transform 0.45s var(--ease), opacity 0.3s;
+}
+body.hud-minimal.reveal-dock #dock, body.hud-minimal #dock:focus-within, body.hud-minimal #stage.searching ~ #dock { transform: translateX(-50%); opacity: 1; }
+body.hud-minimal.has-media #nowCard {
+  display: flex; align-items: center; gap: 14px; cursor: pointer;
+  position: fixed; z-index: 5; left: 50%; bottom: 6vh; transform: translateX(-50%);
+  width: clamp(300px, 26vw, 420px); padding: 12px 16px 12px 12px; border-radius: 18px;
+  transition: opacity 0.3s, transform 0.45s var(--ease);
+}
+body.hud-minimal.reveal-dock #nowCard, body.hud-minimal:has(#stage.searching) #nowCard { opacity: 0; transform: translate(-50%, 20px); pointer-events: none; }
+/* letra mais pro meio: a tela fica limpa */
+body.hud-minimal #lyrics { left: 10vw; right: 10vw; top: 36vh; height: 26vh; }

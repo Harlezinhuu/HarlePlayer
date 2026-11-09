@@ -35,6 +35,7 @@ Works with Spotify, YouTube Music, SoundCloud, Apple Music, Deezer and anything 
   - **YouTube / YouTube Music**: TV-style code login (you authorize at google.com/device, in your own browser). The app never sees your password, only gets **read-only** access, and the key is stored encrypted by Windows on your PC. You can sign out anytime, and the app tells Google.
 - **Import a playlist by link** (or by pasting the link into search): **Spotify**, **SoundCloud** and **YouTube / YouTube Music**, no login. Spotify playlists open in the Spotify app with one click, so they **count toward Wrapped**. SoundCloud and YouTube ones play right here.
 - **10-band equalizer** on the built-in player, with presets (Bass+, Vocal, Rock, Electronic…) or your own.
+- **4 screen styles (HUD)**: *Classic* (cover carousel), *Vinyl* (spinning record with the cover in the middle and a tonearm that lifts on pause), *Studio* (big cover with the full lyrics scrolling beside it) and *Minimal* (just the clock and a card; queue and bar slide in when the mouse gets close).
 - **Artist page**: clicking an artist in search opens a photo, bio, *Play*, *Shuffle* and their top songs.
 - **Fast to play**: the next SoundCloud song downloads while the current one plays (skipping is instant), audio chunks download in parallel and the YouTube player is ready as soon as the app opens.
 - **Screen-edge glow** in the background's colors, pulsing with the bass, and a **Tall** clock style (thin, gradient).

@@ -19,6 +19,14 @@ export function initSettings(app) {
     document.body.classList.toggle("lyrics-line", settings.lyricsMode !== "chunks");
     document.querySelectorAll("#segLyrics button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.lyricsMode));
     for (const c of ["solid", "thin", "outline", "tall"]) document.body.classList.toggle(`clock-${c}`, settings.clockStyle === c);
+    document.querySelectorAll("#segHud button").forEach((b) => b.classList.toggle("sel", b.dataset.v === (settings.hud || "classic")));
+    $("#hudHint").textContent = {
+      classic: "Carrossel de capas no meio, fila na esquerda.",
+      vinyl: "Disco girando com a capa no meio; a agulha levanta quando pausa.",
+      studio: "Capa grande e a letra inteira rolando ao lado.",
+      minimal: "Só o relógio e um cartão. Leve o mouse pra baixo (barra) ou pra esquerda (fila).",
+    }[settings.hud || "classic"];
+    app.applyHud?.();
     document.querySelectorAll("#segClock button").forEach((b) => b.classList.toggle("sel", b.dataset.v === settings.clockStyle));
     document.querySelectorAll("#segFit button").forEach((b) => b.classList.toggle("sel", b.dataset.v === (settings.wallFit || "auto")));
     $("#swDiscord").classList.toggle("on", settings.discord);
@@ -201,6 +209,13 @@ export function initSettings(app) {
     app.shownLine = null;
     app.shownText = "";
     $("#lyricChunk").textContent = "";
+    saveSettings();
+    renderSettings();
+  });
+  $("#segHud").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]");
+    if (!b) return;
+    settings.hud = b.dataset.v;
     saveSettings();
     renderSettings();
   });

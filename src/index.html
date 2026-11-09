@@ -84,6 +84,21 @@
     <div id="carousel"></div>
     <!-- "Abrindo no YouTube Music…" enquanto a música carrega -->
     <div id="loadPill" aria-live="polite"><i></i><i></i><i></i><span></span></div>
+    <!-- "tocando agora" das HUDs Vinil e Estúdio (no lugar do carrossel) -->
+    <div id="hudScene" hidden>
+      <div class="hs-vinyl">
+        <div class="hs-disc"><div class="hs-label"><img id="hsLabel" alt="" draggable="false" /></div></div>
+        <div class="hs-arm"><i class="hs-arm-base"></i><i class="hs-arm-rod"></i><i class="hs-arm-head"></i></div>
+      </div>
+      <div class="hs-cover"><img id="hsCover" alt="" draggable="false" /></div>
+      <div class="hs-meta">
+        <div id="hsTitle"></div>
+        <div id="hsArtist"></div>
+        <div class="hs-prog"><i id="hsFill"></i></div>
+        <div class="hs-time"><span id="hsCur"></span><span id="hsDur"></span></div>
+      </div>
+      <div class="hs-lyr"><ol id="hsLyrics"></ol></div>
+    </div>
     <div id="results" hidden>
       <div class="res-tabs" id="resTabs">
         <button data-rt="all" class="sel">Tudo</button>
@@ -224,6 +239,15 @@
         <span>Tamanho</span>
         <input type="range" class="rng" id="rngLyricSize" min="70" max="140" step="5" />
       </div>
+
+      <label class="row-label">Estilo da tela (HUD)</label>
+      <div class="seg" id="segHud">
+        <button data-v="classic">Clássica</button>
+        <button data-v="vinyl">Vinil</button>
+        <button data-v="studio">Estúdio</button>
+        <button data-v="minimal">Minimal</button>
+      </div>
+      <p class="hint" id="hudHint"></p>
 
       <label class="row-label">Relógio</label>
       <div class="seg" id="segClock">
